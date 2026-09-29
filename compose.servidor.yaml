@@ -1,0 +1,19 @@
+# Usado SÓ no servidor, junto com o compose.yaml:
+#   docker compose -f compose.yaml -f compose.servidor.yaml up --build -d
+#
+# Coloca o Estúdio na mesma rede Docker de um proxy reverso (Caddy) que
+# já roda no servidor, pra ele entregar o seu domínio com HTTPS. O Estúdio
+# continua com banco, dados e container próprios; só o proxy é
+# compartilhado. Defina PROXY_NETWORK no .env com o nome da rede do seu
+# proxy (veja com: docker network ls).
+services:
+  estudio:
+    environment:
+      COOKIE_SEGURO: "1"
+    networks:
+      - default
+      - proxy
+networks:
+  proxy:
+    external: true
+    name: ${PROXY_NETWORK:?Defina PROXY_NETWORK no .env (nome da rede do seu proxy)}

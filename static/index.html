@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Estúdio de Posts</title>
+<style>
+  :root{
+    --tinta:#14161B; --tinta-2:#2A2E37; --papel:#F6F5F1; --cartao:#FFFFFF; --borda:#E4E2DC;
+    --mudo:#6E6C66; --acento:#1F6F5C; --acento-2:#E8F2EE; --alerta:#8A5A00; --alerta-bg:#FFF4DC;
+    --erro:#B3261E; --erro-bg:#FCEBEA; --raio:12px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; font-family:"Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif; background:var(--papel); color:var(--tinta); font-size:14px;}
+  button{font:inherit; cursor:pointer; border:none;}
+  input, select, textarea{font:inherit; width:100%; padding:10px 12px; border:1px solid var(--borda); border-radius:8px; background:#fff; color:var(--tinta);}
+  textarea{resize:vertical; line-height:1.5;}
+  label{display:block; font-weight:600; font-size:13px; margin-bottom:6px;}
+  .oculto{display:none !important;}
+
+  header{background:var(--tinta); color:#fff; padding:14px 28px; display:flex; align-items:center; gap:20px; flex-wrap:wrap; position:sticky; top:0; z-index:10;}
+  .marca{font-weight:800; font-size:17px; letter-spacing:.2px;}
+  .marca span{color:#7FD1B9;}
+  .seletor{display:flex; align-items:center; gap:8px; margin-left:auto;}
+  .seletor select{width:auto; min-width:240px; background:var(--tinta-2); color:#fff; border-color:#3A3F4A;}
+  .btn-claro{background:#fff; color:var(--tinta); padding:9px 14px; border-radius:8px; font-weight:600;}
+
+  main{max-width:1040px; margin:0 auto; padding:28px;}
+  h1{font-size:22px; margin:0 0 4px;}
+  .sub{color:var(--mudo); margin:0 0 22px;}
+  .abas{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:18px;}
+  .aba{padding:9px 16px; border-radius:99px; background:#fff; border:1px solid var(--borda); font-weight:600; color:var(--tinta-2);}
+  .aba.ativo{background:var(--tinta); color:#fff; border-color:var(--tinta);}
+  .cartao{background:var(--cartao); border:1px solid var(--borda); border-radius:var(--raio); padding:22px; margin-bottom:18px;}
+  .campo{margin-bottom:16px;}
+  .info{font-size:12px; color:var(--mudo); margin-top:5px;}
+  .grade-2{display:grid; grid-template-columns:1fr 1fr; gap:0 16px;}
+  .grade-3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:0 12px;}
+  @media (max-width:700px){ .grade-2, .grade-3{grid-template-columns:1fr;} }
+  .pilulas{display:flex; flex-wrap:wrap; gap:8px;}
+  .pilulas label{display:flex; align-items:center; gap:7px; padding:8px 13px; border:1px solid var(--borda); border-radius:99px; font-weight:500; margin:0; cursor:pointer; background:#fff;}
+  .pilulas input{width:auto; margin:0;}
+  .pilulas label:has(input:checked){border-color:var(--acento); background:var(--acento-2); color:var(--acento); font-weight:700;}
+  .primario{background:var(--acento); color:#fff; padding:12px 18px; border-radius:9px; font-weight:700; width:100%;}
+  .primario:disabled{opacity:.6; cursor:wait;}
+  .secundario{background:#fff; border:1px solid var(--borda); color:var(--tinta-2); padding:9px 14px; border-radius:8px; font-weight:600;}
+  .perigo{color:var(--erro);}
+  .erro{background:var(--erro-bg); color:var(--erro); padding:10px 12px; border-radius:8px; margin-top:12px; display:none;}
+  .erro.mostrar{display:block;}
+  .ok{background:var(--acento-2); color:var(--acento); padding:10px 12px; border-radius:8px; margin-top:12px; display:none;}
+  .ok.mostrar{display:block;}
+  .aviso{background:var(--alerta-bg); color:var(--alerta); padding:12px 14px; border-radius:8px;}
+  details.extra{border:1px dashed var(--borda); border-radius:9px; padding:10px 14px; margin-bottom:16px;}
+  details.extra summary{cursor:pointer; font-weight:600; color:var(--acento);}
+  .spinner{display:inline-block; width:14px; height:14px; border:2px solid rgba(0,0,0,.15); border-top-color:var(--alerta); border-radius:50%; animation:gira .8s linear infinite; vertical-align:-2px; margin-right:6px;}
+  @keyframes gira{to{transform:rotate(360deg);}}
+
+  .lista{list-style:none; margin:0; padding:0;}
+  .lista li{display:flex; align-items:center; gap:12px; padding:13px 0; border-bottom:1px solid var(--borda);}
+  .lista li:last-child{border-bottom:none;}
+  .lista .titulo{font-weight:600;}
+  .lista .meta{color:var(--mudo); font-size:12px; margin-top:2px;}
+  .lista .corpo{flex:1;}
+  .pill{font-size:11px; font-weight:700; padding:3px 9px; border-radius:99px; text-transform:uppercase;}
+  .pill.processando{background:var(--alerta-bg); color:var(--alerta);}
+  .pill.concluido{background:var(--acento-2); color:var(--acento);}
+  .pill.erro{background:var(--erro-bg); color:var(--erro);}
+  .link{background:none; color:var(--acento); text-decoration:underline; font-weight:600; padding:2px;}
+
+  .pauta{border:1px solid var(--borda); border-radius:10px; padding:16px; margin-bottom:12px; background:#fff; line-height:1.5;}
+  .pauta h4{margin:4px 0 6px; font-size:15px;}
+  .rot{font-size:11px; font-weight:700; text-transform:uppercase; color:var(--alerta); margin-top:8px;}
+  .etiqueta{display:inline-block; font-size:11px; font-weight:700; padding:2px 8px; border-radius:99px; background:var(--acento-2); color:var(--acento); margin-right:4px;}
+
+  .slides{display:grid; grid-template-columns:repeat(auto-fill, minmax(230px,1fr)); gap:14px; margin-top:14px;}
+  .slide{border:1px solid var(--borda); border-radius:10px; overflow:hidden; background:#fff;}
+  .slide img{width:100%; aspect-ratio:4/5; display:block; background:#EEE; object-fit:cover;}
+  .slide textarea{border:none; border-top:1px solid var(--borda); border-radius:0; min-height:110px; font-size:12.5px;}
+  .caixa{padding:14px 16px; background:#F8F7F3; border-radius:8px; white-space:pre-wrap; line-height:1.6;}
+  .frente-linha{display:grid; grid-template-columns:200px 1fr auto; gap:8px; margin-bottom:8px;}
+  @media (max-width:700px){ .frente-linha{grid-template-columns:1fr;} }
+  .previa{width:216px; aspect-ratio:4/5; border-radius:10px; border:1px solid var(--borda); background:#EEE; display:block;}
+  .vazio{text-align:center; color:var(--mudo); padding:34px 10px;}
+  .vazio strong{display:block; color:var(--tinta); margin-bottom:4px;}
+
+  .tela-central{min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;}
+  .caixa-login{background:#fff; border:1px solid var(--borda); border-radius:16px; padding:32px; width:min(420px,100%);}
+  .caixa-login .marca{color:var(--tinta); font-size:22px; margin-bottom:6px;}
+  .usuario-topo{display:flex; align-items:center; gap:10px; color:#B9BCC4; font-size:13px;}
+  .btn-escuro{background:var(--tinta-2); color:#fff; padding:9px 12px; border-radius:8px; font-weight:600; border:1px solid #3A3F4A;}
+  .uso-cliente{font-size:12.5px; color:var(--mudo); background:#fff; border:1px solid var(--borda); border-radius:99px; padding:6px 12px; display:inline-block; margin-bottom:16px;}
+  .tabela-wrap{overflow-x:auto;}
+  table.painel{width:100%; border-collapse:collapse; font-size:13px; min-width:820px;}
+  table.painel td:first-child{min-width:190px;}
+  table.painel th{text-align:left; font-size:11px; text-transform:uppercase; color:var(--mudo); padding:8px; border-bottom:1px solid var(--borda); white-space:nowrap;}
+  table.painel td{padding:10px 8px; border-bottom:1px solid var(--borda); vertical-align:top;}
+  .acoes{display:flex; flex-wrap:wrap; gap:4px;}
+  .acoes button{font-size:11.5px; padding:4px 8px; border-radius:6px; background:#F1F0EB; color:var(--tinta-2); font-weight:600;}
+  .acoes button:hover{background:#E6E4DD;}
+  .tag{font-size:10.5px; font-weight:700; padding:2px 7px; border-radius:99px; text-transform:uppercase; white-space:nowrap;}
+  .tag.ativo{background:var(--acento-2); color:var(--acento);} .tag.convidado{background:#EAF1FB; color:#2458A6;}
+  .tag.expirado, .tag.bloqueado{background:var(--erro-bg); color:var(--erro);} .tag.pagante{background:#FFF4DC; color:var(--alerta);}
+  .resumo-painel{display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px;}
+  .resumo-painel div{background:#fff; border:1px solid var(--borda); border-radius:10px; padding:12px 16px; min-width:150px;}
+  .resumo-painel b{display:block; font-size:20px;}
+  .link-convite{font-family:monospace; font-size:12px; background:#F1F0EB; padding:8px 10px; border-radius:6px; word-break:break-all;}
+  dialog{border:none; border-radius:14px; padding:24px; width:min(460px, 92vw);}
+  dialog::backdrop{background:rgba(20,22,27,.5);}
+</style>
+</head>
+<body>
+<div id="tela-login" class="tela-central oculto">
+  <div class="caixa-login">
+    <div class="marca">Estúdio de <span style="color:var(--acento);">Posts</span></div>
+    <p class="sub" style="margin-bottom:18px;">Entre com seu e-mail e senha.</p>
+    <div class="campo"><label for="login-email">E-mail</label><input id="login-email" type="email" autocomplete="username"></div>
+    <div class="campo"><label for="login-senha">Senha</label><input id="login-senha" type="password" autocomplete="current-password"></div>
+    <button class="primario" id="btn-entrar">Entrar</button>
+    <div class="erro" id="erro-login"></div>
+    <div class="info" style="margin-top:14px;">Esqueceu a senha? Peça um novo link a quem te convidou.</div>
+  </div>
+</div>
+
+<div id="tela-convite" class="tela-central oculto">
+  <div class="caixa-login">
+    <div class="marca">Estúdio de <span style="color:var(--acento);">Posts</span></div>
+    <p class="sub" id="convite-texto" style="margin-bottom:18px;"></p>
+    <div class="campo"><label>E-mail</label><input id="convite-email" disabled></div>
+    <div class="campo"><label for="convite-senha">Crie sua senha</label><input id="convite-senha" type="password" autocomplete="new-password" placeholder="Mínimo de 8 caracteres"></div>
+    <div class="campo"><label for="convite-senha2">Repita a senha</label><input id="convite-senha2" type="password" autocomplete="new-password"></div>
+    <button class="primario" id="btn-ativar">Criar senha e entrar</button>
+    <div class="erro" id="erro-convite"></div>
+  </div>
+</div>
+
+<div id="app" class="oculto">
+<header>
+  <div class="marca">Estúdio de <span>Posts</span></div>
+  <div class="seletor" id="bloco-seletor">
+    <span style="color:#B9BCC4; font-size:13px;">Gerando para:</span>
+    <select id="sel-perfil"></select>
+    <button class="btn-claro" id="btn-novo-perfil">+ Novo perfil</button>
+    <button class="btn-escuro" id="btn-painel">Painel do dono</button>
+  </div>
+  <div class="usuario-topo" id="bloco-usuario" style="margin-left:auto;">
+    <span id="topo-nome"></span>
+    <button class="btn-escuro" id="btn-sair">Sair</button>
+  </div>
+</header>
+
+<main>
+  <div id="aviso-chave" class="aviso oculto" style="margin-bottom:18px;">A chave da IA (ANTHROPIC_API_KEY) não está configurada no arquivo <b>.env</b>. Dá pra cadastrar perfis, mas gerar posts não vai funcionar até configurar.</div>
+
+  <!-- PAINEL DO DONO -->
+  <section id="painel" class="oculto">
+    <button class="link" id="btn-fechar-painel">← Voltar pros posts</button>
+    <h1 style="margin-top:8px;">Painel do dono</h1>
+    <p class="sub">Quem está usando, quanto está gastando de IA e o prazo de cada acesso. A cobrança é por fora (link da Asaas).</p>
+    <div class="resumo-painel" id="resumo-painel"></div>
+    <div class="cartao">
+      <h3 style="margin-top:0;">Convidar pessoa</h3>
+      <div class="grade-2">
+        <div class="campo"><label for="conv-nome">Nome</label><input id="conv-nome" placeholder="Dr. João Silva"></div>
+        <div class="campo"><label for="conv-email">E-mail</label><input id="conv-email" type="email" placeholder="joao@email.com"></div>
+      </div>
+      <div class="grade-3">
+        <div class="campo"><label for="conv-dias">Acesso por</label>
+          <select id="conv-dias"><option value="7">7 dias</option><option value="15">15 dias</option><option value="30" selected>30 dias</option><option value="60">60 dias</option><option value="90">90 dias</option><option value="0">Ilimitado</option></select>
+          <div class="info">Começa a contar quando a pessoa cria a senha.</div></div>
+        <div class="campo"><label for="conv-limite">Posts por mês</label><input id="conv-limite" type="number" min="1" value="60"></div>
+        <div class="campo"><label for="conv-radar">Buscas no radar por mês</label><input id="conv-radar" type="number" min="1" value="12"></div>
+      </div>
+      <div class="campo"><label for="conv-obs">Observação (só você vê)</label><input id="conv-obs" placeholder="Ex.: amigo da OAB, cortesia 15 dias"></div>
+      <div class="pilulas" style="margin-bottom:14px;"><label><input type="checkbox" id="conv-pagante"> Pagante</label></div>
+      <button class="primario" id="btn-convidar">Gerar convite</button>
+      <div class="erro" id="erro-convidar"></div>
+      <div id="convite-gerado" class="oculto" style="margin-top:14px;">
+        <label>Link do convite (vale 7 dias)</label>
+        <div class="link-convite" id="convite-link"></div>
+        <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
+          <button class="secundario" id="btn-copiar-link">Copiar link</button>
+          <button class="secundario" id="btn-copiar-msg">Copiar mensagem pro WhatsApp</button>
+        </div>
+      </div>
+    </div>
+    <div class="cartao">
+      <h3 style="margin-top:0;">Pessoas</h3>
+      <div class="tabela-wrap"><table class="painel"><thead><tr>
+        <th>Pessoa</th><th>Situação</th><th>Acesso até</th><th>Posts (mês / total)</th><th>Radar (mês)</th><th>Custo IA mês</th><th>Custo IA total</th><th>Último acesso</th><th>Ações</th>
+      </tr></thead><tbody id="tabela-pessoas"></tbody></table></div>
+    </div>
+  </section>
+
+  <div id="sem-perfil" class="cartao oculto">
+    <div class="vazio"><strong>Nenhum perfil ainda</strong>Crie o primeiro perfil (um advogado ou escritório) no botão "+ Novo perfil" lá em cima.</div>
+  </div>
+
+  <div id="com-perfil" class="oculto">
+    <h1 id="titulo-perfil"></h1>
+    <p class="sub" id="sub-perfil"></p>
+    <div class="uso-cliente oculto" id="uso-cliente"></div>
+
+    <div class="abas">
+      <button class="aba ativo" data-aba="criar">Criar post</button>
+      <button class="aba" data-aba="radar">Radar de pautas</button>
+      <button class="aba" data-aba="posts">Posts gerados</button>
+      <button class="aba" data-aba="perfil">Perfil</button>
+    </div>
+
+    <!-- CRIAR -->
+    <section id="aba-criar">
+      <div class="cartao">
+        <div class="campo"><label>Formato</label><div class="pilulas" id="formatos"></div></div>
+        <div class="campo"><label>Tema da área</label><div class="pilulas" id="frentes"></div></div>
+        <div id="pauta-escolhida" class="caixa oculto" style="margin-bottom:16px;"></div>
+        <div class="campo">
+          <label for="tema">Tema do post</label>
+          <input id="tema" placeholder="Ex.: o que fazer nas primeiras 24 horas depois de...">
+          <div class="info">Pode deixar em branco se escolheu uma pauta do radar ou preencheu "Na pele do cliente".</div>
+        </div>
+        <details class="extra">
+          <summary>Na pele do cliente (opcional, deixa o post mais real)</summary>
+          <div class="campo" style="margin-top:12px;"><label for="pele-quem">Quem é essa pessoa</label><input id="pele-quem" placeholder="Ex.: dona de loja que vende pelo Instagram"></div>
+          <div class="campo"><label for="pele-momento">Momento que ela está vivendo</label><input id="pele-momento" placeholder="Ex.: acabou de receber a negativa e não sabe o que fazer"></div>
+          <div class="campo" style="margin-bottom:4px;"><label for="pele-obs">O que o advogado já observou nesses casos</label><input id="pele-obs" placeholder="Ex.: a maioria demora pra procurar ajuda porque acha que não tem jeito"></div>
+        </details>
+        <div class="grade-2">
+          <div class="campo"><label for="tom">Tom</label><select id="tom"></select></div>
+          <div class="campo" id="campo-slides"><label for="n-slides">Quantidade de slides</label>
+            <select id="n-slides"><option>5</option><option>6</option><option selected>7</option><option>8</option><option>10</option></select></div>
+        </div>
+        <div class="campo">
+          <label for="cta">Chamada final (CTA)</label>
+          <select id="cta">
+            <option value="Salve este post pra consultar quando precisar.">Salvar o post</option>
+            <option value="Compartilhe com quem precisa saber disso.">Compartilhar com quem precisa</option>
+            <option value="Siga o perfil pra mais orientações sobre seus direitos.">Seguir o perfil</option>
+            <option value="Deixe sua dúvida nos comentários.">Dúvida nos comentários</option>
+            <option value="">Deixar a IA escolher</option>
+          </select>
+          <div class="info">Só opções permitidas pelo Provimento 205/2021 da OAB.</div>
+        </div>
+        <button class="primario" id="btn-gerar">Gerar post</button>
+        <div class="erro" id="erro-criar"></div>
+      </div>
+    </section>
+
+    <!-- RADAR -->
+    <section id="aba-radar" class="oculto">
+      <div class="cartao">
+        <div class="campo"><label>O que buscar</label>
+          <div class="pilulas">
+            <label><input type="radio" name="modo" value="noticias" checked> Notícias reais da semana</label>
+            <label><input type="radio" name="modo" value="ideias"> Ideias atemporais</label>
+          </div>
+          <div class="info">Notícias: a IA pesquisa na internet e traz fonte e link (1 a 3 minutos). Ideias: parte das dores do público, sem busca.</div>
+        </div>
+        <div class="campo"><label>Temas</label><div class="pilulas" id="radar-frentes"></div></div>
+        <button class="primario" id="btn-radar">Buscar pautas</button>
+        <div class="erro" id="erro-radar"></div>
+        <div id="radar-rodando" class="aviso oculto" style="margin-top:12px;"><span class="spinner"></span>Buscando pautas, atualiza sozinho quando terminar.</div>
+      </div>
+      <div id="radar-resultado"></div>
+    </section>
+
+    <!-- POSTS -->
+    <section id="aba-posts" class="oculto">
+      <div class="cartao"><ul class="lista" id="lista-posts"></ul></div>
+    </section>
+
+    <!-- DETALHE -->
+    <section id="aba-detalhe" class="oculto">
+      <button class="link" id="btn-voltar">← Voltar pros posts</button>
+      <h2 id="det-titulo" style="margin:8px 0 14px;"></h2>
+      <div class="cartao">
+        <div id="det-meta" class="info" style="font-size:13px;"></div>
+        <div id="det-rodando" class="aviso oculto" style="margin-top:12px;"><span class="spinner"></span>Gerando texto e artes, atualiza sozinho quando terminar.</div>
+        <div id="det-erro" class="erro"></div>
+        <div id="det-conteudo" class="oculto">
+          <div id="det-alertas" class="aviso oculto" style="margin-top:14px;"><b>Conferir antes de publicar</b><ul id="det-lista-alertas" style="margin:6px 0 0; padding-left:18px;"></ul></div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:16px;">
+            <button class="primario" style="width:auto;" id="btn-zip">Baixar tudo (.zip)</button>
+            <button class="secundario" id="btn-salvar-edicao">Salvar edições e redesenhar</button>
+            <button class="secundario perigo" id="btn-apagar-post">Apagar</button>
+          </div>
+          <div class="info">Edite o texto embaixo de cada arte e clique em "Salvar edições". Use **palavra** pra destacar.</div>
+          <div class="slides" id="det-slides"></div>
+          <div id="det-roteiro-bloco" class="oculto" style="margin-top:18px;"><label>Roteiro do Reels</label><div class="caixa" id="det-roteiro"></div></div>
+          <div style="margin-top:18px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <label for="det-legenda" style="margin:0;">Legenda</label>
+              <button class="secundario" id="btn-copiar" style="padding:6px 10px; font-size:12px;">Copiar legenda + hashtags</button>
+            </div>
+            <textarea id="det-legenda" rows="9"></textarea>
+            <div class="info" id="det-hashtags"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PERFIL -->
+    <section id="aba-perfil" class="oculto">
+      <div class="cartao">
+        <h3 style="margin-top:0;">Identidade visual</h3>
+        <div style="display:flex; gap:20px; flex-wrap:wrap;">
+          <div style="flex:1; min-width:260px;">
+            <div class="grade-2">
+              <div class="campo"><label for="p-nome">Nome exibido</label><input id="p-nome"></div>
+              <div class="campo"><label for="p-handle">@ do Instagram</label><input id="p-handle" placeholder="@perfil"></div>
+            </div>
+            <div class="campo"><label for="p-estilo">Estilo</label>
+              <select id="p-estilo"><option value="escuro">Escuro (fundo preto)</option><option value="claro">Claro (fundo branco)</option><option value="marca">Azul-marinho e verde</option></select></div>
+            <div class="grade-3">
+              <div class="campo"><label for="p-cor-fundo">Fundo</label><input id="p-cor-fundo" placeholder="padrão"></div>
+              <div class="campo"><label for="p-cor-texto">Texto</label><input id="p-cor-texto" placeholder="padrão"></div>
+              <div class="campo"><label for="p-cor-destaque">Destaque</label><input id="p-cor-destaque" placeholder="padrão"></div>
+            </div>
+            <div class="info" style="margin-top:-8px; margin-bottom:14px;">Cores opcionais em hexadecimal (ex.: #1F6F5C). Em branco usa as do estilo.</div>
+            <div class="campo"><label for="p-avatar">Foto de perfil</label><input type="file" id="p-avatar" accept=".png,.jpg,.jpeg,.webp"><div class="info" id="p-avatar-status"></div></div>
+          </div>
+          <div><label>Prévia</label><img id="p-previa" class="previa" alt="Prévia"><button class="secundario" id="btn-previa" style="margin-top:8px; width:216px;">Atualizar prévia</button></div>
+        </div>
+      </div>
+      <div class="cartao">
+        <h3 style="margin-top:0;">Área e contexto</h3>
+        <div class="grade-2">
+          <div class="campo"><label for="p-area">Área de atuação</label><input id="p-area" placeholder="Ex.: Direito Previdenciário"></div>
+          <div class="campo"><label for="p-voz">Voz dos posts</label><select id="p-voz"></select>
+            <div class="info">Vale pros slides, a legenda e o roteiro.</div></div>
+        </div>
+        <div class="campo"><label for="p-sobre">Sobre o advogado ou escritório (opcional)</label><textarea id="p-sobre" rows="3" placeholder="Cidade, tempo de atuação, especialidade, jeito de atender..."></textarea></div>
+        <label>Temas da área</label>
+        <div class="info" style="margin-top:0; margin-bottom:10px;">Os grandes temas em que esse advogado atua. Viram as opções de "Tema da área" e o foco do radar.</div>
+        <div id="p-frentes"></div>
+        <button class="secundario" id="btn-add-frente">+ Adicionar tema</button>
+      </div>
+      <div class="cartao">
+        <h3 style="margin-top:0;">Público</h3>
+        <div class="info" style="margin-top:0; margin-bottom:10px;">Quem são, o que sentem e quem eles culpam. A IA usa isso em todo post e no radar.</div>
+        <textarea id="p-publico" rows="14"></textarea>
+      </div>
+      <div class="cartao">
+        <h3 style="margin-top:0;">DNA de escrita</h3>
+        <div class="info" style="margin-top:0; margin-bottom:10px;">Cole de 5 a 10 posts que ele já publicou. A IA imita o tom, sem copiar. Separe cada post com uma linha contendo só ---</div>
+        <textarea id="p-dna" rows="12" placeholder="Texto do post 1&#10;---&#10;Texto do post 2"></textarea>
+      </div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="primario" style="width:auto; flex:1;" id="btn-salvar-perfil">Salvar perfil</button>
+        <button class="secundario perigo" id="btn-apagar-perfil">Apagar perfil</button>
+      </div>
+      <div class="erro" id="erro-perfil"></div>
+      <div class="ok" id="ok-perfil"></div>
+    </section>
+  </div>
+</main>
+</div>
+
+<dialog id="dlg-novo">
+  <h3 style="margin-top:0;" id="dlg-novo-titulo">Novo perfil</h3>
+  <p class="info" id="dlg-novo-texto" style="margin-top:-6px;"></p>
+  <div class="campo"><label for="novo-nome">Nome exibido nas artes</label><input id="novo-nome" placeholder="Ex.: Dr. João Silva"></div>
+  <div class="campo"><label for="novo-handle">@ do Instagram</label><input id="novo-handle" placeholder="@joaosilvaadv"></div>
+  <div class="campo"><label for="novo-modelo">Começar a partir do modelo</label><select id="novo-modelo"></select>
+    <div class="info">Já vem com temas e público prontos pra área. Dá pra editar tudo depois.</div></div>
+  <div style="display:flex; gap:8px; justify-content:flex-end;">
+    <button class="secundario" id="btn-cancelar-novo">Cancelar</button>
+    <button class="primario" style="width:auto;" id="btn-criar-perfil">Criar perfil</button>
+  </div>
+  <div class="erro" id="erro-novo"></div>
+</dialog>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const esc = (t) => String(t == null ? "" : t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const mostrarErro = (id, msg) => { $(id).textContent = msg; $(id).classList.add("mostrar"); };
+  const esconder = (id) => $(id).classList.remove("mostrar");
+  const vazio = (t, d) => `<div class="vazio"><strong>${esc(t)}</strong>${esc(d)}</div>`;
+  const quando = (iso) => new Date(iso).toLocaleString("pt-BR");
+
+  async function api(caminho, opcoes){
+    const resp = await fetch(caminho, Object.assign({ credentials: "same-origin" }, opcoes || {}));
+    let corpo = null; try { corpo = await resp.json(); } catch (e) {}
+    if (resp.status === 401 && !caminho.startsWith("/api/login")){ mostrarLogin(); throw new Error("Faça login."); }
+    if (resp.status === 403 && corpo && (corpo.codigo === "expirado" || corpo.codigo === "bloqueado")){
+      mostrarLogin("Seu acesso não está mais ativo. Fale com quem te convidou."); throw new Error(corpo.erro);
+    }
+    if (!resp.ok) throw new Error((corpo && corpo.erro) || ("Erro " + resp.status));
+    return corpo;
+  }
+
+  let eu = null;
+  const ehDono = () => eu && eu.papel === "dono";
+
+  function mostrarTela(qual){
+    ["tela-login", "tela-convite", "app"].forEach((id) => $(id).classList.toggle("oculto", id !== qual));
+  }
+
+  function mostrarLogin(msg){
+    eu = null;
+    mostrarTela("tela-login");
+    if (msg) mostrarErro("erro-login", msg); else esconder("erro-login");
+  }
+
+  $("btn-entrar").addEventListener("click", entrar);
+  $("login-senha").addEventListener("keydown", (e) => { if (e.key === "Enter") entrar(); });
+  async function entrar(){
+    esconder("erro-login");
+    try {
+      eu = await api("/api/login", json("POST", { email: $("login-email").value.trim(), senha: $("login-senha").value }));
+      $("login-senha").value = "";
+      await abrirApp();
+    } catch (e) { if (!$("erro-login").classList.contains("mostrar")) mostrarErro("erro-login", e.message); }
+  }
+
+  $("btn-sair").addEventListener("click", async () => { try { await api("/api/logout", { method: "POST" }); } catch (e) {} mostrarLogin(); });
+
+  // ─── Convite / criar senha ───
+  let tokenConvite = null;
+  async function abrirConvite(token){
+    tokenConvite = token;
+    mostrarTela("tela-convite");
+    try {
+      const c = await api(`/api/convite/${token}`);
+      $("convite-email").value = c.email;
+      $("convite-texto").textContent = c.redefinir
+        ? `Olá, ${c.nome}! Crie uma senha nova pra sua conta.`
+        : `Olá, ${c.nome}! Você foi convidado pro Estúdio de Posts${c.dias_acesso ? ` com ${c.dias_acesso} dias de acesso` : ""}. Crie sua senha pra começar.`;
+    } catch (e) {
+      $("convite-texto").textContent = e.message;
+      $("btn-ativar").disabled = true;
+    }
+  }
+  $("btn-ativar").addEventListener("click", async () => {
+    esconder("erro-convite");
+    if ($("convite-senha").value !== $("convite-senha2").value){ mostrarErro("erro-convite", "As senhas não são iguais."); return; }
+    try {
+      eu = await api(`/api/convite/${tokenConvite}`, json("POST", { senha: $("convite-senha").value }));
+      history.replaceState(null, "", "/");
+      await abrirApp();
+    } catch (e) { mostrarErro("erro-convite", e.message); }
+  });
+  const json = (metodo, corpo) => ({ method: metodo, headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpo) });
+
+  let opcoes = null, perfis = [], perfil = null, pautaEscolhida = null;
+  let timerPost = null, timerRadar = null, abaAtual = "criar";
+
+  // ─── Inicialização ───
+  async function iniciar(){
+    const m = window.location.pathname.match(/^\/convite\/([^/]+)/);
+    if (m){ await abrirConvite(m[1]); return; }
+    try { eu = await api("/api/eu"); } catch (e) { return; }
+    await abrirApp();
+  }
+
+  async function atualizarUso(){
+    if (ehDono()) return;
+    try { eu = await api("/api/eu"); } catch (e) { return; }
+    const fim = eu.acesso_ate ? `Acesso até ${new Date(eu.acesso_ate).toLocaleDateString("pt-BR")}` : "Acesso sem prazo";
+    $("uso-cliente").textContent = `${fim} · Posts este mês: ${eu.posts_mes}/${eu.limite_posts_mes || "-"} · Buscas no radar: ${eu.radar_mes}/${eu.limite_radar_mes || "-"}`;
+  }
+
+  async function abrirApp(){
+    mostrarTela("app");
+    $("topo-nome").textContent = eu.nome;
+    $("bloco-seletor").classList.toggle("oculto", !ehDono());
+    $("uso-cliente").classList.toggle("oculto", ehDono());
+    $("btn-apagar-perfil").classList.toggle("oculto", !ehDono());
+    $("painel").classList.add("oculto");
+    opcoes = await api("/api/opcoes");
+    $("aviso-chave").classList.toggle("oculto", opcoes.chave_configurada);
+    $("formatos").innerHTML = opcoes.formatos.map(([v, r], i) => `<label><input type="radio" name="formato" value="${v}" ${i === 0 ? "checked" : ""}> ${esc(r)}</label>`).join("");
+    document.querySelectorAll('input[name="formato"]').forEach((el) => el.addEventListener("change", () => $("campo-slides").classList.toggle("oculto", formato() !== "carrossel")));
+    $("tom").innerHTML = opcoes.estilos_escrita.map(([v, d]) => `<option value="${v}">${esc(d.split(":")[0])}</option>`).join("");
+    $("novo-modelo").innerHTML = opcoes.modelos_perfil.map(([v, r]) => `<option value="${v}">${esc(r)}</option>`).join("");
+    $("p-voz").innerHTML = opcoes.vozes.map(([v, r]) => `<option value="${v}">${esc(r)}</option>`).join("");
+    await carregarPerfis(localStorage.getItem("perfil_atual"));
+  }
+
+  async function carregarPerfis(selecionar){
+    perfis = await api("/api/perfis");
+    const meus = perfis.filter((p) => !p.de_cliente), deClientes = perfis.filter((p) => p.de_cliente);
+    const opt = (p) => `<option value="${p.id}">${esc(p.nome_exibicao)}${p.de_cliente && p.cliente_nome !== p.nome_exibicao ? ` (${esc(p.cliente_nome)})` : ""}</option>`;
+    $("sel-perfil").innerHTML = (meus.length ? `<optgroup label="Meus perfis">${meus.map(opt).join("")}</optgroup>` : "")
+      + (deClientes.length ? `<optgroup label="Perfis de clientes">${deClientes.map(opt).join("")}</optgroup>` : "");
+    $("sem-perfil").classList.toggle("oculto", perfis.length > 0 || !ehDono());
+    $("com-perfil").classList.toggle("oculto", perfis.length === 0);
+    $("sel-perfil").classList.toggle("oculto", perfis.length === 0);
+    if (!perfis.length){
+      perfil = null;
+      if (!ehDono()) abrirDialogoNovo(true);
+      return;
+    }
+    const alvo = perfis.find((p) => p.id === selecionar) || perfis[0];
+    $("sel-perfil").value = alvo.id;
+    usarPerfil(alvo);
+  }
+
+  function usarPerfil(p){
+    perfil = p;
+    try { localStorage.setItem("perfil_atual", p.id); } catch (e) {}
+    $("titulo-perfil").textContent = p.nome_exibicao;
+    $("sub-perfil").textContent = [p.handle, p.area].filter(Boolean).join(" · ") || "Complete o perfil na aba \"Perfil\".";
+    atualizarUso();
+    $("frentes").innerHTML = p.frentes.map((f, i) => `<label title="${esc(f.descricao)}"><input type="radio" name="frente" value="${esc(f.nome)}" ${i === 0 ? "checked" : ""}> ${esc(f.nome)}</label>`).join("");
+    $("radar-frentes").innerHTML = p.frentes.map((f) => `<label title="${esc(f.descricao)}"><input type="checkbox" name="radar-frente" value="${esc(f.nome)}" checked> ${esc(f.nome)}</label>`).join("");
+    pautaEscolhida = null; mostrarPauta();
+    mostrarAba(abaAtual === "detalhe" ? "posts" : abaAtual);
+  }
+
+  $("sel-perfil").addEventListener("change", () => usarPerfil(perfis.find((p) => p.id === $("sel-perfil").value)));
+
+  function mostrarAba(aba){
+    abaAtual = aba;
+    if (aba !== "detalhe" && timerPost){ clearInterval(timerPost); timerPost = null; }
+    document.querySelectorAll(".aba").forEach((b) => b.classList.toggle("ativo", b.dataset.aba === aba || (aba === "detalhe" && b.dataset.aba === "posts")));
+    ["criar", "radar", "posts", "detalhe", "perfil"].forEach((a) => $("aba-" + a).classList.toggle("oculto", a !== aba));
+    if (aba === "posts") carregarPosts();
+    if (aba === "radar") carregarRadar();
+    if (aba === "perfil") preencherPerfil();
+  }
+  document.querySelectorAll(".aba").forEach((b) => b.addEventListener("click", () => mostrarAba(b.dataset.aba)));
+
+  // ─── Novo perfil ───
+  let dialogoObrigatorio = false;
+  function abrirDialogoNovo(obrigatorio){
+    dialogoObrigatorio = !!obrigatorio;
+    $("novo-nome").value = obrigatorio && eu ? eu.nome : ""; $("novo-handle").value = ""; esconder("erro-novo");
+    $("dlg-novo-titulo").textContent = obrigatorio ? "Bem-vindo! Vamos montar seu perfil" : "Novo perfil";
+    $("dlg-novo-texto").textContent = obrigatorio ? "Escolha sua área. Depois você completa temas, público e seus posts antigos na aba \"Perfil\"." : "";
+    $("btn-cancelar-novo").classList.toggle("oculto", dialogoObrigatorio);
+    $("dlg-novo").showModal();
+  }
+  $("dlg-novo").addEventListener("cancel", (e) => { if (dialogoObrigatorio) e.preventDefault(); });
+  $("btn-novo-perfil").addEventListener("click", () => abrirDialogoNovo(false));
+  $("btn-cancelar-novo").addEventListener("click", () => $("dlg-novo").close());
+  $("btn-criar-perfil").addEventListener("click", async () => {
+    esconder("erro-novo");
+    try {
+      const r = await api("/api/perfis", json("POST", { nome_exibicao: $("novo-nome").value.trim(), handle: $("novo-handle").value.trim(), modelo: $("novo-modelo").value }));
+      dialogoObrigatorio = false;
+      $("dlg-novo").close();
+      $("painel").classList.add("oculto");
+      abaAtual = "perfil";
+      await carregarPerfis(r.id);
+    } catch (e) { mostrarErro("erro-novo", e.message); }
+  });
+
+  // ─── Criar post ───
+  const formato = () => (document.querySelector('input[name="formato"]:checked') || {}).value || "carrossel";
+
+  function mostrarPauta(){
+    const caixa = $("pauta-escolhida");
+    if (!pautaEscolhida){ caixa.classList.add("oculto"); return; }
+    caixa.innerHTML = `<b>Pauta escolhida:</b> ${esc(pautaEscolhida.titulo)}<br><span style="color:var(--mudo);">${esc(pautaEscolhida.angulo || "")}</span><br><button class="link" id="btn-tirar-pauta">remover</button>`;
+    caixa.classList.remove("oculto");
+    $("btn-tirar-pauta").addEventListener("click", () => { pautaEscolhida = null; mostrarPauta(); });
+  }
+
+  $("btn-gerar").addEventListener("click", async () => {
+    esconder("erro-criar");
+    const btn = $("btn-gerar"); btn.disabled = true; btn.textContent = "Gerando…";
+    try {
+      const f = document.querySelector('input[name="frente"]:checked');
+      const corpo = {
+        formato: formato(), frente: f ? f.value : "", tema: $("tema").value.trim(), estilo_escrita: $("tom").value,
+        n_slides: parseInt($("n-slides").value, 10), cta: $("cta").value,
+        pele_quem: $("pele-quem").value.trim(), pele_momento: $("pele-momento").value.trim(), pele_observacao: $("pele-obs").value.trim(),
+      };
+      if (pautaEscolhida) corpo.noticia = pautaEscolhida;
+      const r = await api(`/api/perfis/${perfil.id}/posts`, json("POST", corpo));
+      atualizarUso();
+      ["tema", "pele-quem", "pele-momento", "pele-obs"].forEach((id) => $(id).value = "");
+      pautaEscolhida = null; mostrarPauta();
+      abrirPost(r.id);
+    } catch (e) { mostrarErro("erro-criar", e.message); }
+    finally { btn.disabled = false; btn.textContent = "Gerar post"; }
+  });
+
+  // ─── Radar ───
+  function mostrarPautas(busca){
+    const alvo = $("radar-resultado");
+    if (!busca || busca.status === "processando"){ alvo.innerHTML = ""; return; }
+    if (busca.status === "erro"){ alvo.innerHTML = `<div class="erro mostrar">Erro na busca: ${esc(busca.erro)}</div>`; return; }
+    if (!busca.pautas.length){ alvo.innerHTML = `<div class="cartao">${vazio("Nenhuma pauta encontrada", "Tente de novo ou marque mais temas.")}</div>`; return; }
+    const nomesFormato = Object.fromEntries(opcoes.formatos);
+    alvo.innerHTML = `<div class="info" style="margin-bottom:10px;">${busca.modo === "noticias" ? "Notícias" : "Ideias"} buscadas em ${quando(busca.criado_em)}</div>` +
+      busca.pautas.map((p, i) => `<div class="pauta">
+        <span class="etiqueta">${esc(p.frente)}</span><span class="etiqueta">${esc(nomesFormato[p.formato_sugerido] || p.formato_sugerido)}</span>${p.potencial === "alto" ? '<span class="etiqueta">potencial alto</span>' : ""}
+        <h4>${esc(p.titulo)}</h4><div>${esc(p.resumo)}</div>
+        ${p.por_que_importa ? `<div class="rot">Por que importa</div><div>${esc(p.por_que_importa)}</div>` : ""}
+        ${p.angulo ? `<div class="rot">Ângulo sugerido</div><div><b>${esc(p.angulo)}</b></div>` : ""}
+        ${p.fonte_url ? `<div class="info">Fonte: ${esc(p.fonte_nome)} ${esc(p.data)} · <a href="${esc(p.fonte_url)}" target="_blank" rel="noopener noreferrer">abrir matéria</a></div>` : ""}
+        <button class="primario" style="width:auto; margin-top:12px; padding:9px 14px;" data-i="${i}">Criar post com essa pauta</button>
+      </div>`).join("");
+    alvo.querySelectorAll("button[data-i]").forEach((b) => b.addEventListener("click", () => {
+      const p = busca.pautas[parseInt(b.dataset.i, 10)];
+      pautaEscolhida = { titulo: p.titulo, resumo: p.resumo, fonte_nome: p.fonte_nome, fonte_url: p.fonte_url, angulo: p.angulo };
+      mostrarAba("criar");
+      const f = document.querySelector(`input[name="formato"][value="${p.formato_sugerido}"]`); if (f){ f.checked = true; f.dispatchEvent(new Event("change")); }
+      const fr = [...document.querySelectorAll('input[name="frente"]')].find((el) => el.value === p.frente); if (fr) fr.checked = true;
+      mostrarPauta(); window.scrollTo(0, 0);
+    }));
+  }
+
+  async function carregarRadar(){
+    if (timerRadar){ clearInterval(timerRadar); timerRadar = null; }
+    const perfilId = perfil.id;
+    async function atualizar(){
+      if (!perfil || perfil.id !== perfilId || abaAtual !== "radar") return false;
+      let buscas; try { buscas = await api(`/api/perfis/${perfilId}/pautas`); } catch (e) { mostrarErro("erro-radar", e.message); return false; }
+      const rodando = !!(buscas[0] && buscas[0].status === "processando");
+      $("radar-rodando").classList.toggle("oculto", !rodando);
+      $("btn-radar").disabled = rodando;
+      mostrarPautas(rodando ? buscas.find((b) => b.status !== "processando") : buscas[0]);
+      return rodando;
+    }
+    if (await atualizar()) timerRadar = setInterval(async () => { if (!(await atualizar())){ clearInterval(timerRadar); timerRadar = null; } }, 5000);
+  }
+
+  $("btn-radar").addEventListener("click", async () => {
+    esconder("erro-radar");
+    const frentes = [...document.querySelectorAll('input[name="radar-frente"]:checked')].map((el) => el.value);
+    if (!frentes.length){ mostrarErro("erro-radar", "Marque pelo menos um tema."); return; }
+    try {
+      await api(`/api/perfis/${perfil.id}/pautas`, json("POST", { modo: document.querySelector('input[name="modo"]:checked').value, frentes }));
+      carregarRadar(); atualizarUso();
+    } catch (e) { mostrarErro("erro-radar", e.message); }
+  });
+
+  // ─── Lista de posts ───
+  async function carregarPosts(){
+    const lista = $("lista-posts");
+    lista.innerHTML = '<li class="info">Carregando…</li>';
+    try {
+      const posts = await api(`/api/perfis/${perfil.id}/posts`);
+      if (!posts.length){ lista.innerHTML = `<li style="display:block;">${vazio("Nenhum post gerado ainda", "Use a aba \"Criar post\".")}</li>`; return; }
+      const nomes = Object.fromEntries(opcoes.formatos);
+      const rot = { processando: "Gerando…", concluido: "Pronto", erro: "Erro" };
+      lista.innerHTML = posts.map((p) => `<li>
+        <div class="corpo"><div class="titulo">${esc(p.titulo_interno || p.tema)}</div><div class="meta">${esc(nomes[p.formato] || p.formato)} · ${esc(p.frente)} · ${quando(p.criado_em)}</div></div>
+        <span class="pill ${p.status}">${p.status === "processando" ? '<span class="spinner"></span>' : ""}${rot[p.status] || p.status}</span>
+        <button class="link" data-id="${p.id}">Ver</button></li>`).join("");
+      lista.querySelectorAll("button[data-id]").forEach((b) => b.addEventListener("click", () => abrirPost(b.dataset.id)));
+    } catch (e) { lista.innerHTML = `<li class="perigo">${esc(e.message)}</li>`; }
+  }
+
+  // ─── Detalhe ───
+  $("btn-voltar").addEventListener("click", () => mostrarAba("posts"));
+
+  async function abrirPost(id){
+    mostrarAba("detalhe");
+    $("det-titulo").textContent = "Carregando…";
+    $("det-conteudo").classList.add("oculto");
+    esconder("det-erro");
+    async function atualizar(){
+      if (abaAtual !== "detalhe") return false;
+      let post; try { post = await api(`/api/posts/${id}`); } catch (e) { $("det-titulo").textContent = "Erro ao carregar"; return false; }
+      const nomes = Object.fromEntries(opcoes.formatos);
+      $("det-titulo").textContent = post.titulo_interno || post.tema;
+      $("det-meta").textContent = `${nomes[post.formato] || post.formato} · ${post.frente} · ${quando(post.criado_em)}`;
+      $("det-rodando").classList.toggle("oculto", post.status !== "processando");
+      if (post.status === "erro") mostrarErro("det-erro", post.erro || "Erro ao gerar.");
+      if (post.status === "concluido") preencherPost(post);
+      return post.status === "processando";
+    }
+    if (await atualizar()) timerPost = setInterval(async () => { if (!(await atualizar())){ clearInterval(timerPost); timerPost = null; } }, 5000);
+  }
+
+  function preencherPost(post){
+    const grade = $("det-slides");
+    const t = Date.now();
+    grade.innerHTML = post.slides.map((s, i) => `<div class="slide"><img src="/api/posts/${post.id}/slide/${i + 1}?t=${t}" alt="Arte ${i + 1}"><textarea>${esc(s)}</textarea></div>`).join("");
+    $("det-alertas").classList.toggle("oculto", !post.alertas.length);
+    $("det-lista-alertas").innerHTML = post.alertas.map((a) => `<li>${esc(a)}</li>`).join("");
+    const r = post.roteiro_reels;
+    $("det-roteiro-bloco").classList.toggle("oculto", !r);
+    if (r) $("det-roteiro").textContent = [`GANCHO: ${r.gancho || ""}`, ""].concat((r.cenas || []).map((c) => `[${c.tempo || ""}]\nFala: ${c.fala || ""}${c.na_tela ? `\nNa tela: ${c.na_tela}` : ""}\n`)).concat([`FECHAMENTO: ${r.fechamento || ""}`]).join("\n");
+    $("det-legenda").value = post.legenda;
+    $("det-hashtags").textContent = post.hashtags.join(" ");
+    $("det-conteudo").classList.remove("oculto");
+
+    $("btn-zip").onclick = () => { window.location.href = `/api/posts/${post.id}/arquivo`; };
+    $("btn-copiar").onclick = async () => {
+      try { await navigator.clipboard.writeText(($("det-legenda").value + "\n\n" + post.hashtags.join(" ")).trim()); $("btn-copiar").textContent = "Copiado!"; }
+      catch (e) { alert("Não consegui copiar. Selecione o texto e copie."); }
+      setTimeout(() => $("btn-copiar").textContent = "Copiar legenda + hashtags", 2000);
+    };
+    $("btn-salvar-edicao").onclick = async () => {
+      const b = $("btn-salvar-edicao"); b.disabled = true; b.textContent = "Redesenhando…";
+      try {
+        await api(`/api/posts/${post.id}/textos`, json("PUT", { slides: [...grade.querySelectorAll("textarea")].map((x) => x.value), legenda: $("det-legenda").value }));
+        preencherPost(await api(`/api/posts/${post.id}`));
+      } catch (e) { alert(e.message); }
+      finally { b.disabled = false; b.textContent = "Salvar edições e redesenhar"; }
+    };
+    $("btn-apagar-post").onclick = async () => {
+      if (!confirm("Apagar esse post e as artes dele?")) return;
+      try { await api(`/api/posts/${post.id}`, { method: "DELETE" }); mostrarAba("posts"); } catch (e) { alert(e.message); }
+    };
+  }
+
+  // ─── Perfil ───
+  function linhaFrente(f){
+    const div = document.createElement("div");
+    div.className = "frente-linha";
+    div.innerHTML = `<input class="f-nome" placeholder="Nome do tema" value="${esc(f.nome)}"><input class="f-desc" placeholder="O que entra nesse tema" value="${esc(f.descricao)}"><button class="secundario perigo" title="Remover">✕</button>`;
+    div.querySelector("button").addEventListener("click", () => div.remove());
+    return div;
+  }
+  $("btn-add-frente").addEventListener("click", () => $("p-frentes").appendChild(linhaFrente({ nome: "", descricao: "" })));
+
+  const coresForm = () => {
+    const c = {};
+    [["fundo", "p-cor-fundo"], ["texto", "p-cor-texto"], ["destaque", "p-cor-destaque"]].forEach(([k, id]) => { const v = $(id).value.trim(); if (/^#[0-9A-Fa-f]{6}$/.test(v)) c[k] = v; });
+    return c;
+  };
+
+  async function atualizarPrevia(){
+    try {
+      const resp = await fetch(`/api/perfis/${perfil.id}/previa`, json("POST", { nome_exibicao: $("p-nome").value, handle: $("p-handle").value, estilo_visual: $("p-estilo").value, cores: coresForm() }));
+      if (resp.ok){ const antigo = $("p-previa").src; $("p-previa").src = URL.createObjectURL(await resp.blob()); if (antigo.startsWith("blob:")) URL.revokeObjectURL(antigo); }
+    } catch (e) {}
+  }
+  $("btn-previa").addEventListener("click", atualizarPrevia);
+  $("p-estilo").addEventListener("change", atualizarPrevia);
+
+  function preencherPerfil(){
+    esconder("erro-perfil"); esconder("ok-perfil");
+    const p = perfil;
+    $("p-nome").value = p.nome_exibicao; $("p-handle").value = p.handle; $("p-estilo").value = p.estilo_visual;
+    $("p-cor-fundo").value = p.cores.fundo || ""; $("p-cor-texto").value = p.cores.texto || ""; $("p-cor-destaque").value = p.cores.destaque || "";
+    $("p-avatar-status").textContent = p.tem_avatar ? "Foto cadastrada. Envie outra pra trocar." : "Sem foto: as artes usam a inicial do nome.";
+    $("p-area").value = p.area; $("p-voz").value = p.voz || "neutra"; $("p-sobre").value = p.sobre; $("p-publico").value = p.publico; $("p-dna").value = p.dna;
+    $("p-frentes").innerHTML = ""; p.frentes.forEach((f) => $("p-frentes").appendChild(linhaFrente(f)));
+    atualizarPrevia();
+  }
+
+  $("p-avatar").addEventListener("change", async () => {
+    const arq = $("p-avatar").files[0]; if (!arq) return;
+    const dados = new FormData(); dados.append("avatar", arq);
+    try { await api(`/api/perfis/${perfil.id}/avatar`, { method: "POST", body: dados }); $("p-avatar-status").textContent = "Foto atualizada."; perfil.tem_avatar = true; atualizarPrevia(); }
+    catch (e) { mostrarErro("erro-perfil", e.message); }
+  });
+
+  $("btn-salvar-perfil").addEventListener("click", async () => {
+    esconder("erro-perfil"); esconder("ok-perfil");
+    const frentes = [...$("p-frentes").querySelectorAll(".frente-linha")].map((l) => ({ nome: l.querySelector(".f-nome").value.trim(), descricao: l.querySelector(".f-desc").value.trim() })).filter((f) => f.nome);
+    try {
+      await api(`/api/perfis/${perfil.id}`, json("PUT", {
+        nome_exibicao: $("p-nome").value, handle: $("p-handle").value, estilo_visual: $("p-estilo").value, cores: coresForm(),
+        area: $("p-area").value, voz: $("p-voz").value, sobre: $("p-sobre").value, frentes, publico: $("p-publico").value, dna: $("p-dna").value,
+      }));
+      await carregarPerfis(perfil.id);
+      $("ok-perfil").textContent = "Perfil salvo. Os próximos posts já usam essas informações."; $("ok-perfil").classList.add("mostrar");
+    } catch (e) { mostrarErro("erro-perfil", e.message); }
+  });
+
+  $("btn-apagar-perfil").addEventListener("click", async () => {
+    if (!confirm(`Apagar o perfil "${perfil.nome_exibicao}" e TODOS os posts dele? Não dá pra desfazer.`)) return;
+    try { await api(`/api/perfis/${perfil.id}`, { method: "DELETE" }); abaAtual = "criar"; await carregarPerfis(); } catch (e) { mostrarErro("erro-perfil", e.message); }
+  });
+
+  // ─── Painel do dono ───
+  const reais = (usd, cot) => (usd * cot).toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2 });
+  const dolar = (usd) => "US$ " + usd.toFixed(2);
+  const dataCurta = (iso) => iso ? new Date(iso).toLocaleDateString("pt-BR") : "-";
+  const ROT_SIT = { ativo: "Ativo", convidado: "Convite enviado", expirado: "Expirado", bloqueado: "Pausado" };
+
+  function abrirPainel(){
+    $("com-perfil").classList.add("oculto"); $("sem-perfil").classList.add("oculto");
+    $("painel").classList.remove("oculto");
+    carregarPainel();
+  }
+  $("btn-painel").addEventListener("click", abrirPainel);
+  $("btn-fechar-painel").addEventListener("click", () => { $("painel").classList.add("oculto"); carregarPerfis(perfil && perfil.id); });
+
+  async function carregarPainel(){
+    let dados;
+    try { dados = await api("/api/admin/usuarios"); } catch (e) { $("tabela-pessoas").innerHTML = `<tr><td colspan="9" class="perigo">${esc(e.message)}</td></tr>`; return; }
+    const cot = dados.cotacao_dolar, pessoas = dados.usuarios.filter((u) => u.papel !== "dono");
+    const ativos = pessoas.filter((u) => u.situacao === "ativo").length;
+    const pagantes = pessoas.filter((u) => u.pagante && u.situacao === "ativo").length;
+    $("resumo-painel").innerHTML = `
+      <div><span class="info">Pessoas ativas</span><b>${ativos}</b></div>
+      <div><span class="info">Pagantes ativos</span><b>${pagantes}</b></div>
+      <div><span class="info">Custo de IA no mês (todos)</span><b>${reais(dados.custo_mes_usd, cot)}</b><span class="info">${dolar(dados.custo_mes_usd)}</span></div>`;
+    if (!pessoas.length){ $("tabela-pessoas").innerHTML = `<tr><td colspan="9">${vazio("Ninguém convidado ainda", "Use o formulário acima pra convidar a primeira pessoa.")}</td></tr>`; return; }
+    $("tabela-pessoas").innerHTML = pessoas.map((u) => `<tr>
+      <td><b>${esc(u.nome)}</b><div class="info" style="margin:0;">${esc(u.email)}</div>
+        ${u.perfis.length ? `<div class="info" style="margin:0;">Perfil: ${esc(u.perfis.join(", "))}</div>` : ""}
+        ${u.observacao ? `<div class="info" style="margin:0;">📝 ${esc(u.observacao)}</div>` : ""}</td>
+      <td><span class="tag ${u.situacao}">${ROT_SIT[u.situacao] || u.situacao}</span>${u.pagante ? ' <span class="tag pagante">Pagante</span>' : ""}</td>
+      <td>${u.situacao === "convidado" ? (u.dias_acesso ? `${u.dias_acesso} dias após ativar` : "Ilimitado") : (u.acesso_ate ? dataCurta(u.acesso_ate) : "Ilimitado")}</td>
+      <td>${u.posts_mes}/${u.limite_posts_mes} · ${u.posts_total}</td>
+      <td>${u.radar_mes}/${u.limite_radar_mes}</td>
+      <td>${reais(u.custo_mes_usd, cot)}<div class="info" style="margin:0;">${dolar(u.custo_mes_usd)}</div></td>
+      <td>${reais(u.custo_total_usd, cot)}</td>
+      <td>${u.ultimo_acesso ? new Date(u.ultimo_acesso).toLocaleString("pt-BR") : "Nunca"}</td>
+      <td><select class="sel-acao" data-id="${u.id}" style="width:auto; padding:6px 8px; font-size:12.5px;">
+        <option value="">Ações…</option>
+        <optgroup label="Prazo">
+          <option value="estender|7">+7 dias</option><option value="estender|15">+15 dias</option><option value="estender|30">+30 dias</option>
+          <option value="ilimitado|">Sem prazo (ilimitado)</option><option value="encerrar|">Encerrar hoje</option>
+        </optgroup>
+        <optgroup label="Acesso">
+          ${u.situacao === "bloqueado" ? '<option value="desbloquear|">Reativar</option>' : '<option value="bloquear|">Pausar</option>'}
+          <option value="link|">${u.situacao === "convidado" ? "Ver link do convite" : "Gerar link de nova senha"}</option>
+        </optgroup>
+        <optgroup label="Conta">
+          <option value="editar|">Editar limites / pagante / observação</option>
+          <option value="remover|">Remover pessoa</option>
+        </optgroup>
+      </select></td></tr>`).join("");
+    $("tabela-pessoas").querySelectorAll(".sel-acao").forEach((sel) => sel.addEventListener("change", () => {
+      const [acao, dias] = sel.value.split("|"); sel.value = "";
+      if (acao) acaoPessoa(sel.dataset.id, acao, dias, pessoas);
+    }));
+  }
+
+  async function acaoPessoa(id, acao, dias, pessoas){
+    const u = pessoas.find((x) => x.id === id);
+    try {
+      if (acao === "remover"){
+        if (!confirm(`Remover ${u.nome}? Apaga a conta, o perfil e todos os posts dessa pessoa. Não dá pra desfazer.`)) return;
+        await api(`/api/admin/usuarios/${id}`, { method: "DELETE" });
+      } else if (acao === "link"){
+        const r = u.link_convite ? { link_convite: u.link_convite } : await api(`/api/admin/usuarios/${id}`, json("PUT", { acao: "novo_convite" }));
+        prompt(`Link pra ${u.nome} (vale 7 dias). Copie e envie:`, r.link_convite);
+      } else if (acao === "editar"){
+        const limite = prompt("Posts por mês:", u.limite_posts_mes); if (limite === null) return;
+        const radar = prompt("Buscas no radar por mês:", u.limite_radar_mes); if (radar === null) return;
+        const obs = prompt("Observação (só você vê):", u.observacao); if (obs === null) return;
+        const pagante = confirm(`${u.nome} é pagante?\n\nOK = Sim, pagante\nCancelar = Não (cortesia)`);
+        await api(`/api/admin/usuarios/${id}`, json("PUT", { acao: "editar", nome: u.nome, limite_posts_mes: limite, limite_radar_mes: radar, observacao: obs, pagante }));
+      } else {
+        if (acao === "encerrar" && !confirm(`Encerrar o acesso de ${u.nome} agora?`)) return;
+        await api(`/api/admin/usuarios/${id}`, json("PUT", { acao, dias }));
+      }
+      carregarPainel();
+    } catch (e) { alert(e.message); }
+  }
+
+  let ultimoConvite = null;
+  $("btn-convidar").addEventListener("click", async () => {
+    esconder("erro-convidar");
+    const corpo = {
+      nome: $("conv-nome").value.trim(), email: $("conv-email").value.trim(), dias_acesso: parseInt($("conv-dias").value, 10),
+      limite_posts_mes: $("conv-limite").value, limite_radar_mes: $("conv-radar").value,
+      pagante: $("conv-pagante").checked, observacao: $("conv-obs").value.trim(),
+    };
+    try {
+      const r = await api("/api/admin/usuarios", json("POST", corpo));
+      const prazo = corpo.dias_acesso ? `${corpo.dias_acesso} dias de acesso` : "acesso liberado";
+      ultimoConvite = { link: r.link_convite, msg: `Olá, ${corpo.nome.split(" ")[0]}! Liberei pra você ${prazo} ao Estúdio de Posts, que cria posts pro Instagram de advogados, já no seu nicho e dentro das regras da OAB. É só abrir o link, criar sua senha e configurar sua área:\n\n${r.link_convite}\n\nO link vale por 7 dias. Qualquer dúvida, me chama!` };
+      $("convite-link").textContent = r.link_convite;
+      $("convite-gerado").classList.remove("oculto");
+      ["conv-nome", "conv-email", "conv-obs"].forEach((id) => $(id).value = ""); $("conv-pagante").checked = false;
+      carregarPainel();
+    } catch (e) { mostrarErro("erro-convidar", e.message); }
+  });
+  async function copiar(texto, botao, rotulo){
+    try { await navigator.clipboard.writeText(texto); botao.textContent = "Copiado!"; } catch (e) { prompt("Copie:", texto); }
+    setTimeout(() => botao.textContent = rotulo, 2000);
+  }
+  $("btn-copiar-link").addEventListener("click", () => ultimoConvite && copiar(ultimoConvite.link, $("btn-copiar-link"), "Copiar link"));
+  $("btn-copiar-msg").addEventListener("click", () => ultimoConvite && copiar(ultimoConvite.msg, $("btn-copiar-msg"), "Copiar mensagem pro WhatsApp"));
+
+  iniciar().catch((e) => alert("Erro ao iniciar: " + e.message));
+})();
+</script>
+</body>
+</html>

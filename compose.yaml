@@ -1,0 +1,14 @@
+# Estúdio de Posts.
+# No seu computador: docker compose up --build -d  ->  http://localhost:5100
+# No servidor: veja compose.servidor.yaml e o README ("Colocar online").
+# A porta é publicada só em 127.0.0.1; de fora, o acesso é pelo Caddy (HTTPS).
+services:
+  estudio:
+    build: .
+    container_name: estudio-posts
+    env_file: .env
+    ports:
+      - "127.0.0.1:5100:5100"
+    volumes:
+      - ./dados:/app/dados
+    restart: unless-stopped

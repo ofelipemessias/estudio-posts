@@ -1,0 +1,16 @@
+# Segredos: NUNCA publicar
+.env
+.env.*
+!.env.example
+
+# Dados de clientes (banco, fotos, artes): NUNCA publicar
+dados/
+
+# Python / sistema
+__pycache__/
+*.pyc
+.venv/
+venv/
+.DS_Store
+Thumbs.db
+*.zip
