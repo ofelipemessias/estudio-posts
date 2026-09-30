@@ -2,6 +2,18 @@
 
 Registro da evolução do Estúdio de Posts. Datas no formato AAAA-MM-DD.
 
+## [0.7.0] - 2026-09-30
+### Adicionado
+- **Tema claro e escuro** da interface, com botão de lua/sol no topo (ao
+  lado do "Sair") e nas telas de login e convite. A escolha fica salva no
+  navegador; na primeira visita, segue o tema do sistema operacional. O tema
+  é aplicado antes da página aparecer (sem "piscar" branco).
+- Todas as cores da interface viraram variáveis (`--campo`, `--suave`,
+  `--topo`...), com uma versão escura em `html.escuro`.
+### Observação
+- O tema muda só a aparência do sistema. As artes dos posts continuam
+  seguindo o estilo escolhido em cada perfil.
+
 ## [0.6.0] - 2026-09-30
 ### Adicionado
 - Novos modelos prontos de área: **Tributário, Empresarial, Criminal,
