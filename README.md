@@ -18,6 +18,12 @@ dentro das regras de publicidade da OAB (Provimento 205/2021).
 - **Cobrança:** fora do sistema (link da Asaas). Aqui só existe a
   marcação "pagante" e as observações.
 
+## Nome do produto
+
+O nome que aparece na interface vem de `APP_NOME` no `.env` (padrão:
+"Estúdio de Posts"). Pra trocar a marca, mude a linha e reinicie
+(`docker compose up -d`, ou o compose do servidor).
+
 ## Rodar no seu computador
 
 1. Copie `.env.example` para `.env` e preencha: `ANTHROPIC_API_KEY`,
@@ -72,6 +78,7 @@ Não chamam a IA de verdade (respostas simuladas) e usam um banco temporário:
 pip install -r requirements.txt
 python tests/teste_seguranca.py
 python tests/teste_voz_e_texto.py
+python tests/teste_nome_app.py
 ```
 
 ## Arquivos

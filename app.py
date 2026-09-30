@@ -1,5 +1,5 @@
 """
-Estúdio de Posts.
+Estúdio de Posts (nome exibido configurável por APP_NOME no .env).
 
 Contas:
 - DONO: vê e administra tudo (convites, prazos, limites, uso e custo de
@@ -28,7 +28,8 @@ from functools import wraps
 from pathlib import Path
 from urllib.parse import urlparse
 
-from flask import Flask, g, jsonify, request, send_file, send_from_directory, session
+from flask import Flask, Response, g, jsonify, request, send_file, send_from_directory, session
+from markupsafe import escape
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
@@ -51,6 +52,33 @@ COTACAO_DOLAR = float(os.environ.get("COTACAO_DOLAR", "5.50"))
 LIMITE_POSTS_PADRAO = int(os.environ.get("LIMITE_POSTS_MES_PADRAO", "60"))
 LIMITE_RADAR_PADRAO = int(os.environ.get("LIMITE_RADAR_MES_PADRAO", "12"))
 VALIDADE_CONVITE_DIAS = 7
+
+# Nome do produto mostrado na interface (login, topo, aba do navegador,
+# convites). Trocar a marca = mudar APP_NOME no .env e reiniciar.
+APP_NOME = (os.environ.get("APP_NOME") or "Estúdio de Posts").strip()[:60] or "Estúdio de Posts"
+
+
+def _marca_html(nome: str) -> str:
+    """Versão do nome pra logo: destaca a última palavra ("Estúdio de
+    <span>Posts</span>") ou um sufixo não alfanumérico ("Advoga<span>+</span>").
+    Tudo passa por escape, então nenhum caractere do nome vira HTML."""
+    partes = nome.split()
+    if len(partes) > 1:
+        return f"{escape(' '.join(partes[:-1]))} <span>{escape(partes[-1])}</span>"
+    corpo = nome.rstrip("+*!.#")
+    sufixo = nome[len(corpo):]
+    if corpo and sufixo:
+        return f"{escape(corpo)}<span>{escape(sufixo)}</span>"
+    return str(escape(nome))
+
+
+def _pagina_html() -> str:
+    html = (BASE / "static" / "index.html").read_text(encoding="utf-8")
+    # JSON seguro dentro de <script>: sem "<" literal (evita fechar a tag).
+    nome_js = json.dumps(APP_NOME, ensure_ascii=False).replace("<", "\\u003c").replace(">", "\\u003e")
+    return (html.replace("{{APP_NOME}}", str(escape(APP_NOME)))
+                .replace("{{APP_MARCA}}", _marca_html(APP_NOME))
+                .replace("{{APP_NOME_JSON}}", nome_js))
 
 app = Flask(__name__, static_folder=None)
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
@@ -585,7 +613,7 @@ def admin_remover(usuario_id):
 @app.get("/")
 @app.get("/convite/<_token>")
 def pagina(_token=None):
-    resp = send_from_directory(BASE / "static", "index.html")
+    resp = Response(_pagina_html(), mimetype="text/html")
     resp.headers["Cache-Control"] = "no-store"
     return resp
 

@@ -2,6 +2,18 @@
 
 Registro da evolução do Estúdio de Posts. Datas no formato AAAA-MM-DD.
 
+## [0.4.0] - 2026-09-29
+### Adicionado
+- Nome do produto configurável pela variável **`APP_NOME`** no `.env`. Vale
+  pro título da aba, a logo (tela de login, tela de convite e topo) e as
+  mensagens de convite (inclusive a pronta pro WhatsApp). Trocar a marca
+  passa a ser só mudar essa linha e reiniciar. Sem `APP_NOME`, continua
+  "Estúdio de Posts".
+- Destaque automático na logo: última palavra ("Estúdio de **Posts**") ou
+  sufixo como "+" ("Advoga**+**").
+- Teste `tests/teste_nome_app.py`, incluindo proteção contra nomes com
+  caracteres especiais (o nome é sempre escapado, nunca vira HTML/JS).
+
 ## [0.3.0] - 2026-09-29
 ### Adicionado
 - Campo **"Voz dos posts"** no perfil: primeira pessoa ("eu"), institucional
