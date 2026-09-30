@@ -11,7 +11,8 @@ dentro das regras de publicidade da OAB (Provimento 205/2021).
   quem é pagante, pausa, reativa, estende ou encerra o acesso. No
   **Painel do dono** vê quem está usando, quantos posts cada um gerou e
   quanto de IA cada um gastou (em US$ e R$). Também pode gerar posts
-  pra qualquer perfil.
+  pra qualquer perfil, escolhendo na tela **"Quem vai gerar agora?"**
+  (cartões com foto, uso, voz e o quanto cada perfil está completo).
 - **Convidado:** recebe um link, cria a senha, escolhe a área e
   configura o próprio nicho (temas, público, posts antigos pro "DNA").
   Só vê o que é dele. O prazo começa a contar quando ele cria a senha.
@@ -79,6 +80,7 @@ pip install -r requirements.txt
 python tests/teste_seguranca.py
 python tests/teste_voz_e_texto.py
 python tests/teste_nome_app.py
+python tests/teste_perfis.py
 ```
 
 ## Arquivos

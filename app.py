@@ -656,13 +656,52 @@ def listar_perfis():
                                  "ORDER BY u.papel='dono' DESC, p.nome_exibicao COLLATE NOCASE").fetchall()
         else:
             linhas = con.execute("SELECT p.*, NULL AS dono_nome, NULL AS dono_papel FROM perfis p WHERE usuario_id=?", (g.usuario["id"],)).fetchall()
+    inicio = _inicio_mes()
     saida = []
-    for r in linhas:
-        d = {k: v for k, v in _perfil_dict(r).items() if k != "avatar"}
-        d["de_cliente"] = r["dono_papel"] == "cliente"
-        d["cliente_nome"] = r["dono_nome"] if d["de_cliente"] else None
-        saida.append(d)
+    with conectar() as con:
+        for r in linhas:
+            d = {k: v for k, v in _perfil_dict(r).items() if k != "avatar"}
+            d["de_cliente"] = r["dono_papel"] == "cliente"
+            d["cliente_nome"] = r["dono_nome"] if d["de_cliente"] else None
+            d.update(_resumo_perfil(con, d, r["avatar"], inicio))
+            if d["de_cliente"]:
+                dono_conta = buscar_usuario(usuario_id=r["usuario_id"])
+                d["cliente_situacao"] = situacao_acesso(dono_conta) if dono_conta else None
+                d["cliente_acesso_ate"] = dono_conta["acesso_ate"] if dono_conta else None
+            saida.append(d)
     return jsonify(saida)
+
+
+def _resumo_perfil(con, perfil: dict, avatar: str | None, inicio_mes: str) -> dict:
+    """Informações pra tela de escolha de perfil: uso, cor da marca e o
+    quanto o perfil está completo (o que mais influencia a qualidade)."""
+    uso = con.execute(
+        "SELECT COUNT(*), MAX(criado_em), SUM(CASE WHEN criado_em>=? THEN 1 ELSE 0 END) "
+        "FROM posts WHERE perfil_id=? AND status='concluido'",
+        (inicio_mes, perfil["id"]),
+    ).fetchone()
+    paleta = render_post.montar_paleta(perfil["estilo_visual"], perfil["cores"])
+    itens = [
+        ("Foto de perfil", bool(avatar)),
+        ("@ do Instagram", bool(perfil["handle"])),
+        ("Área de atuação", bool(perfil["area"])),
+        ("Sobre o advogado", bool((perfil["sobre"] or "").strip())),
+        ("Público", len((perfil["publico"] or "").strip()) > 80),
+        ("DNA de escrita", len((perfil["dna"] or "").strip()) > 200),
+    ]
+    versao_avatar = None
+    if avatar and (PASTA_AVATARES / avatar).exists():
+        versao_avatar = int((PASTA_AVATARES / avatar).stat().st_mtime)
+    return {
+        "posts_total": uso[0] or 0,
+        "ultimo_post_em": uso[1],
+        "posts_mes": uso[2] or 0,
+        "cor_destaque": paleta["destaque"],
+        "cor_fundo": paleta["fundo"],
+        "avatar_versao": versao_avatar,
+        "completo_pct": round(100 * sum(1 for _, feito in itens if feito) / len(itens)),
+        "falta": [nome for nome, feito in itens if not feito],
+    }
 
 
 @app.post("/api/perfis")
@@ -753,6 +792,17 @@ def enviar_avatar(perfil_id):
     with conectar() as con:
         con.execute("UPDATE perfis SET avatar=? WHERE id=?", (nome, perfil_id))
     return jsonify({"ok": True})
+
+
+@app.get("/api/perfis/<perfil_id>/avatar")
+@login_obrigatorio
+def ver_avatar(perfil_id):
+    perfil = perfil_autorizado(perfil_id)
+    if not perfil or not perfil.get("avatar") or not (PASTA_AVATARES / perfil["avatar"]).exists():
+        return jsonify({"erro": "Sem foto."}), 404
+    resp = send_file(PASTA_AVATARES / perfil["avatar"])
+    resp.headers["Cache-Control"] = "private, max-age=86400"
+    return resp
 
 
 @app.post("/api/perfis/<perfil_id>/previa")

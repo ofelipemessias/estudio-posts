@@ -64,7 +64,7 @@
   .pill{font-size:11px; font-weight:700; padding:3px 9px; border-radius:99px; text-transform:uppercase;}
   .pill.processando{background:var(--alerta-bg); color:var(--alerta);}
   .pill.concluido{background:var(--acento-2); color:var(--acento);}
-  .pill.erro{background:var(--erro-bg); color:var(--erro);}
+  .pill.erro{background:var(--erro-bg); color:var(--erro); display:inline-block; margin:0; padding:3px 9px; border-radius:99px; font-size:11px;}
   .link{background:none; color:var(--acento); text-decoration:underline; font-weight:600; padding:2px;}
 
   .pauta{border:1px solid var(--borda); border-radius:10px; padding:16px; margin-bottom:12px; background:#fff; line-height:1.5;}
@@ -105,6 +105,40 @@
   .resumo-painel div{background:#fff; border:1px solid var(--borda); border-radius:10px; padding:12px 16px; min-width:150px;}
   .resumo-painel b{display:block; font-size:20px;}
   .link-convite{font-family:monospace; font-size:12px; background:#F1F0EB; padding:8px 10px; border-radius:6px; word-break:break-all;}
+  /* ---------- Tela "Quem vai gerar agora?" ---------- */
+  .perfis-topo{display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap; margin-bottom:22px;}
+  .perfis-topo h1{font-size:26px;}
+  .perfis-acoes{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+  .perfis-acoes input{width:260px;}
+  .grupo-perfis{font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--mudo); margin:26px 0 12px;}
+  .grupo-perfis:first-child{margin-top:0;}
+  .grade-perfis{display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:18px;}
+  .card-perfil{background:#fff; border:1px solid var(--borda); border-radius:16px; padding:0; overflow:hidden; text-align:left;
+    display:flex; flex-direction:column; transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease; color:var(--tinta);}
+  .card-perfil:hover, .card-perfil:focus-visible{transform:translateY(-4px); box-shadow:0 14px 30px rgba(20,22,27,.12); border-color:var(--acento); outline:none;}
+  .card-perfil.atual{border:2px solid var(--acento);}
+  .card-faixa{height:86px; position:relative; display:flex; align-items:flex-end; padding:0 18px; border-bottom:1px solid rgba(0,0,0,.06);}
+  .card-faixa .selo-atual{position:absolute; top:10px; right:10px; background:rgba(255,255,255,.92); color:var(--acento); font-size:10.5px; font-weight:800; padding:3px 8px; border-radius:99px; text-transform:uppercase;}
+  .avatar-g{width:76px; height:76px; border-radius:50%; object-fit:cover; border:4px solid #fff; margin-bottom:-38px; background:#EEE; box-shadow:0 2px 8px rgba(0,0,0,.12);}
+  .avatar-g.inicial, .avatar-p.inicial{display:flex; align-items:center; justify-content:center; font-weight:800; letter-spacing:.5px;}
+  .avatar-g.inicial{font-size:26px;}
+  .card-corpo{padding:46px 18px 16px; display:flex; flex-direction:column; gap:6px; flex:1;}
+  .card-nome{font-size:16.5px; font-weight:800; line-height:1.25;}
+  .card-sub{font-size:12.5px; color:var(--mudo); line-height:1.4;}
+  .card-tags{display:flex; flex-wrap:wrap; gap:5px; margin-top:2px;}
+  .card-uso{font-size:12.5px; color:var(--tinta-2); display:flex; justify-content:space-between; gap:8px; border-top:1px dashed var(--borda); padding-top:8px; margin-top:4px;}
+  .card-uso b{font-weight:700;}
+  .barra{height:6px; background:#EFEDE7; border-radius:99px; overflow:hidden; margin-top:4px;}
+  .barra span{display:block; height:100%; background:var(--acento); border-radius:99px;}
+  .card-falta{font-size:11.5px; color:var(--mudo); line-height:1.35;}
+  .card-novo{border:2px dashed var(--borda); background:transparent; align-items:center; justify-content:center; min-height:250px; color:var(--mudo); font-weight:700; gap:10px;}
+  .card-novo .mais{width:64px; height:64px; border-radius:50%; background:#fff; border:1px solid var(--borda); display:flex; align-items:center; justify-content:center; font-size:30px; color:var(--acento);}
+  .perfil-atual{display:flex; align-items:center; gap:10px; background:var(--tinta-2); border:1px solid #3A3F4A; color:#fff; padding:6px 12px 6px 6px; border-radius:99px; text-align:left;}
+  .perfil-atual:hover{border-color:#7FD1B9;}
+  .perfil-atual small{display:block; font-size:10.5px; color:#B9BCC4; line-height:1.1;}
+  .perfil-atual b{font-size:13.5px; font-weight:700;}
+  .perfil-atual .seta{color:#7FD1B9; font-size:14px; margin-left:4px;}
+  .avatar-p{width:32px; height:32px; border-radius:50%; object-fit:cover; font-size:12px; flex-shrink:0;}
   dialog{border:none; border-radius:14px; padding:24px; width:min(460px, 92vw);}
   dialog::backdrop{background:rgba(20,22,27,.5);}
 </style>
@@ -138,9 +172,12 @@
 <header>
   <div class="marca">{{APP_MARCA}}</div>
   <div class="seletor" id="bloco-seletor">
-    <span style="color:#B9BCC4; font-size:13px;">Gerando para:</span>
-    <select id="sel-perfil"></select>
-    <button class="btn-claro" id="btn-novo-perfil">+ Novo perfil</button>
+    <button class="perfil-atual oculto" id="btn-perfil-atual" title="Trocar de perfil">
+      <span id="topo-avatar"></span>
+      <span><small>Gerando para</small><b id="topo-perfil-nome"></b></span>
+      <span class="seta">⇄</span>
+    </button>
+    <button class="btn-escuro" id="btn-ver-perfis">Perfis</button>
     <button class="btn-escuro" id="btn-painel">Painel do dono</button>
   </div>
   <div class="usuario-topo" id="bloco-usuario" style="margin-left:auto;">
@@ -190,6 +227,21 @@
         <th>Pessoa</th><th>Situação</th><th>Acesso até</th><th>Posts (mês / total)</th><th>Radar (mês)</th><th>Custo IA mês</th><th>Custo IA total</th><th>Último acesso</th><th>Ações</th>
       </tr></thead><tbody id="tabela-pessoas"></tbody></table></div>
     </div>
+  </section>
+
+  <!-- ESCOLHA DE PERFIL -->
+  <section id="tela-perfis" class="oculto">
+    <div class="perfis-topo">
+      <div>
+        <h1>Quem vai gerar agora?</h1>
+        <p class="sub" style="margin:0;">Escolha o perfil pra criar posts, buscar pautas ou ajustar a configuração.</p>
+      </div>
+      <div class="perfis-acoes">
+        <input id="busca-perfis" type="search" placeholder="Buscar perfil, @ ou cliente…">
+        <button class="primario" style="width:auto;" id="btn-novo-perfil">+ Novo perfil</button>
+      </div>
+    </div>
+    <div id="grade-perfis"></div>
   </section>
 
   <div id="sem-perfil" class="cartao oculto">
@@ -476,30 +528,129 @@
     $("tom").innerHTML = opcoes.estilos_escrita.map(([v, d]) => `<option value="${v}">${esc(d.split(":")[0])}</option>`).join("");
     $("novo-modelo").innerHTML = opcoes.modelos_perfil.map(([v, r]) => `<option value="${v}">${esc(r)}</option>`).join("");
     $("p-voz").innerHTML = opcoes.vozes.map(([v, r]) => `<option value="${v}">${esc(r)}</option>`).join("");
-    await carregarPerfis(localStorage.getItem("perfil_atual"));
+    await carregarPerfis(localStorage.getItem("perfil_atual"), { escolher: true });
   }
 
-  async function carregarPerfis(selecionar){
+  // opcoes: { escolher: mostra a tela de perfis (se houver mais de um),
+  //           forcar: mostra a tela de perfis sempre }
+  async function carregarPerfis(selecionar, opcoesTela){
+    const o = opcoesTela || {};
     perfis = await api("/api/perfis");
-    const meus = perfis.filter((p) => !p.de_cliente), deClientes = perfis.filter((p) => p.de_cliente);
-    const opt = (p) => `<option value="${p.id}">${esc(p.nome_exibicao)}${p.de_cliente && p.cliente_nome !== p.nome_exibicao ? ` (${esc(p.cliente_nome)})` : ""}</option>`;
-    $("sel-perfil").innerHTML = (meus.length ? `<optgroup label="Meus perfis">${meus.map(opt).join("")}</optgroup>` : "")
-      + (deClientes.length ? `<optgroup label="Perfis de clientes">${deClientes.map(opt).join("")}</optgroup>` : "");
-    $("sem-perfil").classList.toggle("oculto", perfis.length > 0 || !ehDono());
-    $("com-perfil").classList.toggle("oculto", perfis.length === 0);
-    $("sel-perfil").classList.toggle("oculto", perfis.length === 0);
+    $("sem-perfil").classList.add("oculto");
     if (!perfis.length){
       perfil = null;
-      if (!ehDono()) abrirDialogoNovo(true);
+      atualizarTopoPerfil();
+      if (ehDono()) mostrarTelaPerfis(); else abrirDialogoNovo(true);
+      return;
+    }
+    if (ehDono() && (o.forcar || (o.escolher && perfis.length > 1))){
+      perfil = perfis.find((p) => p.id === selecionar) || null;
+      mostrarTelaPerfis();
       return;
     }
     const alvo = perfis.find((p) => p.id === selecionar) || perfis[0];
-    $("sel-perfil").value = alvo.id;
     usarPerfil(alvo);
   }
 
+  // ─── Tela "Quem vai gerar agora?" ───
+  const ROT_VOZ = { eu: "Voz: eu", nos: "Voz: nós", neutra: "Voz neutra" };
+  const SIT_CLIENTE = { ativo: ["Acesso ativo", "concluido"], convidado: ["Convite enviado", "processando"],
+                        expirado: ["Acesso expirado", "erro"], bloqueado: ["Acesso pausado", "erro"] };
+
+  function tempoRelativo(iso){
+    if (!iso) return null;
+    const dias = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+    if (dias <= 0) return "hoje";
+    if (dias === 1) return "ontem";
+    if (dias < 7) return `há ${dias} dias`;
+    if (dias < 30){ const s = Math.floor(dias / 7); return s === 1 ? "há 1 semana" : `há ${s} semanas`; }
+    const m = Math.floor(dias / 30); return m === 1 ? "há 1 mês" : `há ${m} meses`;
+  }
+
+  const PALAVRAS_IGNORADAS = new Set(["dr", "dra", "de", "da", "do", "das", "dos", "e", "&", "advogados", "advogadas",
+    "advocacia", "associados", "sociedade", "escritório", "escritorio"]);
+  function iniciais(nome){
+    const partes = String(nome || "?").split(/\s+/).map((w) => w.replace(/[.,]/g, "")).filter(Boolean);
+    const uteis = partes.filter((w) => !PALAVRAS_IGNORADAS.has(w.toLowerCase()));
+    const base = uteis.length ? uteis : partes;
+    return ((base[0] || "?")[0] + (base.length > 1 ? base[base.length - 1][0] : "")).toUpperCase();
+  }
+
+  function avatarHTML(p, classe){
+    if (p.avatar_versao) return `<img class="${classe}" src="/api/perfis/${encodeURIComponent(p.id)}/avatar?v=${p.avatar_versao}" alt="">`;
+    return `<span class="${classe} inicial" style="background:${esc(p.cor_destaque)}; color:${esc(p.cor_fundo)};">${esc(iniciais(p.nome_exibicao))}</span>`;
+  }
+
+  function cartaoPerfil(p){
+    const ultimo = tempoRelativo(p.ultimo_post_em);
+    const sit = p.de_cliente && SIT_CLIENTE[p.cliente_situacao];
+    const falta = p.falta && p.falta.length ? ` · falta: ${p.falta.slice(0, 2).join(", ")}${p.falta.length > 2 ? "…" : ""}` : "";
+    return `<button class="card-perfil ${perfil && perfil.id === p.id ? "atual" : ""}" data-id="${esc(p.id)}">
+      <div class="card-faixa" style="background:linear-gradient(118deg, ${esc(p.cor_fundo)} 0 64%, ${esc(p.cor_destaque)} 64% 100%);">
+        ${avatarHTML(p, "avatar-g")}
+        ${perfil && perfil.id === p.id ? '<span class="selo-atual">Em uso</span>' : ""}
+      </div>
+      <div class="card-corpo">
+        <div class="card-nome">${esc(p.nome_exibicao)}</div>
+        <div class="card-sub">${esc([p.handle, p.area].filter(Boolean).join(" · ") || "Perfil ainda sem área definida")}</div>
+        <div class="card-tags">
+          <span class="etiqueta">${esc(ROT_VOZ[p.voz] || "Voz neutra")}</span>
+          ${p.de_cliente && p.cliente_nome && p.cliente_nome !== p.nome_exibicao ? `<span class="etiqueta">Cliente: ${esc(p.cliente_nome)}</span>` : ""}
+          ${sit ? `<span class="pill ${sit[1]}">${sit[0]}</span>` : ""}
+        </div>
+        <div class="card-uso"><span>Último post</span><b>${ultimo || "nenhum ainda"}</b></div>
+        <div class="card-uso" style="border-top:none; padding-top:0; margin-top:0;"><span>Posts</span><b>${p.posts_mes} no mês · ${p.posts_total} no total</b></div>
+        <div class="barra" title="Quanto mais completo, melhores os posts"><span style="width:${Number(p.completo_pct) || 0}%;"></span></div>
+        <div class="card-falta">Perfil ${Number(p.completo_pct) || 0}% completo${esc(falta)}</div>
+      </div>
+    </button>`;
+  }
+
+  function renderGradePerfis(){
+    const termo = ($("busca-perfis").value || "").trim().toLowerCase();
+    const bate = (p) => !termo || [p.nome_exibicao, p.handle, p.area, p.cliente_nome].some((v) => (v || "").toLowerCase().includes(termo));
+    const lista = perfis.filter(bate);
+    const meus = lista.filter((p) => !p.de_cliente), clientes = lista.filter((p) => p.de_cliente);
+    const novo = `<button class="card-perfil card-novo" id="card-novo-perfil"><span class="mais">+</span>Novo perfil</button>`;
+    let html = "";
+    if (!termo || meus.length) html += `<div class="grupo-perfis">Meus perfis</div><div class="grade-perfis">${meus.map(cartaoPerfil).join("")}${termo ? "" : novo}</div>`;
+    if (clientes.length) html += `<div class="grupo-perfis">Perfis de clientes (${clientes.length})</div><div class="grade-perfis">${clientes.map(cartaoPerfil).join("")}</div>`;
+    if (termo && !lista.length) html = `<div class="cartao">${vazio("Nenhum perfil encontrado", "Tente outro nome, @ ou cliente.")}</div>`;
+    $("grade-perfis").innerHTML = html;
+    $("grade-perfis").querySelectorAll(".card-perfil[data-id]").forEach((b) => b.addEventListener("click", () => {
+      abaAtual = "criar";
+      usarPerfil(perfis.find((p) => p.id === b.dataset.id));
+      window.scrollTo(0, 0);
+    }));
+    const cn = $("card-novo-perfil"); if (cn) cn.addEventListener("click", () => abrirDialogoNovo(false));
+  }
+
+  function mostrarTelaPerfis(){
+    ["com-perfil", "painel", "sem-perfil"].forEach((id) => $(id).classList.add("oculto"));
+    $("tela-perfis").classList.remove("oculto");
+    atualizarTopoPerfil();
+    renderGradePerfis();
+  }
+
+  function atualizarTopoPerfil(){
+    const btn = $("btn-perfil-atual");
+    btn.classList.toggle("oculto", !perfil);
+    $("btn-ver-perfis").classList.toggle("oculto", !!perfil);
+    if (!perfil) return;
+    $("topo-avatar").innerHTML = avatarHTML(perfil, "avatar-p");
+    $("topo-perfil-nome").textContent = perfil.nome_exibicao;
+  }
+
+  $("busca-perfis").addEventListener("input", renderGradePerfis);
+  $("btn-perfil-atual").addEventListener("click", () => carregarPerfis(perfil && perfil.id, { forcar: true }));
+  $("btn-ver-perfis").addEventListener("click", () => carregarPerfis(perfil && perfil.id, { forcar: true }));
+
   function usarPerfil(p){
     perfil = p;
+    $("tela-perfis").classList.add("oculto");
+    $("painel").classList.add("oculto");
+    $("com-perfil").classList.remove("oculto");
+    atualizarTopoPerfil();
     try { localStorage.setItem("perfil_atual", p.id); } catch (e) {}
     $("titulo-perfil").textContent = p.nome_exibicao;
     $("sub-perfil").textContent = [p.handle, p.area].filter(Boolean).join(" · ") || "Complete o perfil na aba \"Perfil\".";
@@ -510,7 +661,6 @@
     mostrarAba(abaAtual === "detalhe" ? "posts" : abaAtual);
   }
 
-  $("sel-perfil").addEventListener("change", () => usarPerfil(perfis.find((p) => p.id === $("sel-perfil").value)));
 
   function mostrarAba(aba){
     abaAtual = aba;
@@ -741,7 +891,7 @@
   $("p-avatar").addEventListener("change", async () => {
     const arq = $("p-avatar").files[0]; if (!arq) return;
     const dados = new FormData(); dados.append("avatar", arq);
-    try { await api(`/api/perfis/${perfil.id}/avatar`, { method: "POST", body: dados }); $("p-avatar-status").textContent = "Foto atualizada."; perfil.tem_avatar = true; atualizarPrevia(); }
+    try { await api(`/api/perfis/${perfil.id}/avatar`, { method: "POST", body: dados }); $("p-avatar-status").textContent = "Foto atualizada."; perfil.tem_avatar = true; perfil.avatar_versao = Math.floor(Date.now() / 1000); atualizarTopoPerfil(); atualizarPrevia(); }
     catch (e) { mostrarErro("erro-perfil", e.message); }
   });
 
@@ -760,7 +910,7 @@
 
   $("btn-apagar-perfil").addEventListener("click", async () => {
     if (!confirm(`Apagar o perfil "${perfil.nome_exibicao}" e TODOS os posts dele? Não dá pra desfazer.`)) return;
-    try { await api(`/api/perfis/${perfil.id}`, { method: "DELETE" }); abaAtual = "criar"; await carregarPerfis(); } catch (e) { mostrarErro("erro-perfil", e.message); }
+    try { await api(`/api/perfis/${perfil.id}`, { method: "DELETE" }); abaAtual = "criar"; perfil = null; await carregarPerfis(null, { forcar: true }); } catch (e) { mostrarErro("erro-perfil", e.message); }
   });
 
   // ─── Painel do dono ───
@@ -770,12 +920,12 @@
   const ROT_SIT = { ativo: "Ativo", convidado: "Convite enviado", expirado: "Expirado", bloqueado: "Pausado" };
 
   function abrirPainel(){
-    $("com-perfil").classList.add("oculto"); $("sem-perfil").classList.add("oculto");
+    ["com-perfil", "sem-perfil", "tela-perfis"].forEach((id) => $(id).classList.add("oculto"));
     $("painel").classList.remove("oculto");
     carregarPainel();
   }
   $("btn-painel").addEventListener("click", abrirPainel);
-  $("btn-fechar-painel").addEventListener("click", () => { $("painel").classList.add("oculto"); carregarPerfis(perfil && perfil.id); });
+  $("btn-fechar-painel").addEventListener("click", () => { $("painel").classList.add("oculto"); carregarPerfis(perfil && perfil.id, perfil ? {} : { forcar: true }); });
 
   async function carregarPainel(){
     let dados;

@@ -2,6 +2,25 @@
 
 Registro da evolução do Estúdio de Posts. Datas no formato AAAA-MM-DD.
 
+## [0.5.0] - 2026-09-30
+### Adicionado
+- Tela **"Quem vai gerar agora?"** (estilo seleção de perfis de streaming) pro
+  dono: um cartão por perfil com foto (ou iniciais nas cores da marca do
+  perfil), faixa com as duas cores da marca, @, área, voz, último post,
+  posts no mês e no total, e barra de "perfil completo" com o que falta
+  configurar (foto, @, área, sobre, público, DNA).
+- Perfis de clientes separados em "Perfis de clientes", com a situação do
+  acesso (ativo, convite enviado, expirado, pausado).
+- Busca por nome, @, área ou cliente, e cartão "+ Novo perfil".
+- No topo, o seletor virou um botão com a foto e o nome do perfil em uso;
+  clicar volta pra tela de perfis. Ao entrar com mais de um perfil, o dono
+  começa pela tela de perfis.
+- Rota `GET /api/perfis/<id>/avatar` (só o dono ou o próprio cliente).
+- Teste `tests/teste_perfis.py`.
+### Corrigido
+- A etiqueta vermelha de situação (ex.: "Erro" na lista de posts) ficava
+  invisível por herdar o estilo escondido das caixas de erro.
+
 ## [0.4.0] - 2026-09-29
 ### Adicionado
 - Nome do produto configurável pela variável **`APP_NOME`** no `.env`. Vale
