@@ -2,6 +2,13 @@
 
 Registro da evolução do Estúdio de Posts. Datas no formato AAAA-MM-DD.
 
+## [0.7.1] - 2026-09-30
+### Corrigido
+- Links de convite e de nova senha saíam com `http://` quando o app roda
+  atrás do Caddy (funcionavam pelo redirecionamento, mas o certo é
+  `https://`). Novo `CONFIAR_PROXY=1` (já ligado no `compose.servidor.yaml`)
+  faz o app confiar nos cabeçalhos do proxy.
+
 ## [0.7.0] - 2026-09-30
 ### Adicionado
 - **Tema claro e escuro** da interface, com botão de lua/sol no topo (ao

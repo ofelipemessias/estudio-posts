@@ -30,6 +30,7 @@ from urllib.parse import urlparse
 
 from flask import Flask, Response, g, jsonify, request, send_file, send_from_directory, session
 from markupsafe import escape
+from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
@@ -82,6 +83,12 @@ def _pagina_html() -> str:
                 .replace("{{APP_NOME_JSON}}", nome_js))
 
 app = Flask(__name__, static_folder=None)
+if os.environ.get("CONFIAR_PROXY", "0") == "1":
+    # Atrás do Caddy: confia nos cabeçalhos X-Forwarded-* dele pra saber que
+    # o acesso de fora é HTTPS e qual é o domínio. Assim os links de convite
+    # já saem com https://. Só ligar quando a porta estiver fechada pro
+    # mundo (compose publica em 127.0.0.1) e só o proxy chegar no app.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
 app.secret_key = os.environ.get("SECRET_KEY", "")
 if len(app.secret_key) < 32:

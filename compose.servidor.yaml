@@ -10,6 +10,7 @@ services:
   estudio:
     environment:
       COOKIE_SEGURO: "1"
+      CONFIAR_PROXY: "1"
     networks:
       - default
       - proxy
