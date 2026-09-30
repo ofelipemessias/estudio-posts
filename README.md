@@ -15,6 +15,8 @@ dentro das regras de publicidade da OAB (Provimento 205/2021).
   (cartões com foto, uso, voz e o quanto cada perfil está completo).
 - **Convidado:** recebe um link, cria a senha, escolhe a área e
   configura o próprio nicho (temas, público, posts antigos pro "DNA").
+  Se a área dele não estiver entre os modelos prontos, escolhe "Outra área",
+  digita e a IA monta os temas e o público.
   Só vê o que é dele. O prazo começa a contar quando ele cria a senha.
 - **Cobrança:** fora do sistema (link da Asaas). Aqui só existe a
   marcação "pagante" e as observações.
@@ -81,6 +83,7 @@ python tests/teste_seguranca.py
 python tests/teste_voz_e_texto.py
 python tests/teste_nome_app.py
 python tests/teste_perfis.py
+python tests/teste_area.py
 ```
 
 ## Arquivos

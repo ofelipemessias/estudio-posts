@@ -134,8 +134,95 @@ O QUE ELES SENTEM
 OS "INIMIGOS" DO PÚBLICO
 - Desinformação; decisões tomadas no calor da emoção; demora e custo de inventário mal planejado.""",
     },
+    "tributario": {
+        "rotulo": "Tributário",
+        "area": "Direito Tributário",
+        "frentes": [
+            {"nome": "Empresas", "descricao": "Planejamento tributário, regime de tributação, recuperação de créditos"},
+            {"nome": "Pessoa física", "descricao": "Imposto de renda, malha fina, isenções (ex.: doença grave), herança e ITCMD"},
+            {"nome": "Dívidas e execução", "descricao": "Dívida ativa, execução fiscal, parcelamentos e transação tributária"},
+        ],
+        "publico": """QUEM É O PÚBLICO
+- Donos de pequenas e médias empresas que sentem que pagam imposto demais.
+- Pessoas físicas com dúvida no imposto de renda, caídas na malha fina ou com dívida com a Receita.
+
+O QUE ELES SENTEM
+- Medo da Receita e de multas; sensação de pagar muito sem entender por quê; insegurança com mudanças de regra.
+
+OS "INIMIGOS" DO PÚBLICO
+- Burocracia fiscal; regras que mudam o tempo todo; cobrança automática sem análise; falta de orientação na hora certa.""",
+    },
+    "empresarial": {
+        "rotulo": "Empresarial",
+        "area": "Direito Empresarial",
+        "frentes": [
+            {"nome": "Sociedade", "descricao": "Contrato social, acordo de sócios, entrada e saída de sócios"},
+            {"nome": "Contratos", "descricao": "Contratos com clientes, fornecedores e parceiros; cobrança e inadimplência"},
+            {"nome": "Proteção do negócio", "descricao": "Marca, LGPD, prevenção de riscos e de processos"},
+        ],
+        "publico": """QUEM É O PÚBLICO
+- Empreendedores e donos de pequenas empresas, sócios de negócios familiares e startups.
+
+O QUE ELES SENTEM
+- Pressa pra crescer e medo de "problema jurídico escondido"; insegurança com sócios, contratos e cópia da marca.
+
+OS "INIMIGOS" DO PÚBLICO
+- Contrato de modelo pronto da internet; sociedade só "no fio do bigode"; cliente que não paga; concorrente que copia.""",
+    },
+    "criminal": {
+        "rotulo": "Criminal",
+        "area": "Direito Penal e Processual Penal",
+        "frentes": [
+            {"nome": "Direitos na abordagem", "descricao": "Direitos na abordagem policial, prisão em flagrante, audiência de custódia"},
+            {"nome": "Investigação e processo", "descricao": "Inquérito, depoimento, defesa, recursos"},
+            {"nome": "Crimes digitais", "descricao": "Golpes, crimes contra a honra na internet, vazamento de conteúdo íntimo"},
+        ],
+        "publico": """QUEM É O PÚBLICO
+- Pessoas (e familiares) que passam por uma investigação, abordagem ou processo criminal.
+- Vítimas de crimes, inclusive digitais, que não sabem como agir.
+
+O QUE ELES SENTEM
+- Medo, urgência, vergonha e desinformação; sensação de estar sem saída.
+
+OS "INIMIGOS" DO PÚBLICO
+- Desinformação e boatos; agir sem orientação no primeiro momento; exposição nas redes.""",
+    },
+    "imobiliario": {
+        "rotulo": "Imobiliário",
+        "area": "Direito Imobiliário",
+        "frentes": [
+            {"nome": "Compra e venda", "descricao": "Contrato, documentação, financiamento, distrato"},
+            {"nome": "Locação", "descricao": "Aluguel, despejo, reajuste, garantias"},
+            {"nome": "Regularização", "descricao": "Usucapião, escritura, inventário de imóvel, condomínio"},
+        ],
+        "publico": """QUEM É O PÚBLICO
+- Pessoas comprando, vendendo ou alugando imóvel; proprietários e inquilinos; famílias com imóvel irregular.
+
+O QUE ELES SENTEM
+- Medo de perder o dinheiro de uma vida; insegurança com contrato e documentação; cansaço com problema de condomínio.
+
+OS "INIMIGOS" DO PÚBLICO
+- Contrato mal feito; documentação irregular; construtora que atrasa; inquilino ou proprietário que não cumpre o combinado.""",
+    },
+    "saude": {
+        "rotulo": "Saúde e Plano de Saúde",
+        "area": "Direito à Saúde",
+        "frentes": [
+            {"nome": "Plano de saúde", "descricao": "Negativa de cobertura, reajuste abusivo, cancelamento do plano"},
+            {"nome": "SUS e medicamentos", "descricao": "Medicamentos de alto custo, cirurgias, tratamentos pelo SUS"},
+            {"nome": "Erro médico", "descricao": "Falhas no atendimento e direitos do paciente"},
+        ],
+        "publico": """QUEM É O PÚBLICO
+- Pacientes e familiares que tiveram tratamento, exame ou remédio negado; idosos com reajuste alto do plano.
+
+O QUE ELES SENTEM
+- Urgência e angústia (a saúde não espera); impotência diante do plano ou do sistema.
+
+OS "INIMIGOS" DO PÚBLICO
+- Plano que nega cobertura; reajuste abusivo; burocracia e demora no SUS.""",
+    },
     "em_branco": {
-        "rotulo": "Outra área (em branco)",
+        "rotulo": "Outra área (a IA monta pra você)",
         "area": "",
         "frentes": [{"nome": "Geral", "descricao": "Temas gerais da área de atuação"}],
         "publico": "QUEM É O PÚBLICO\n- \n\nO QUE ELES SENTEM\n- \n\nOS \"INIMIGOS\" DO PÚBLICO\n- ",
@@ -404,6 +491,52 @@ Deixe fonte_nome, fonte_url e data vazios."""
         if p.get("formato_sugerido") not in FORMATOS:
             p["formato_sugerido"] = "carrossel"
     return pautas, extrair_uso(resposta)
+
+
+SAIDA_JSON_AREA = """SAÍDA — responda SOMENTE com um JSON válido (sem texto antes ou depois, sem ```):
+{
+  "area": "nome da área de atuação, bem escrito (ex.: Direito Agrário)",
+  "frentes": [{"nome": "nome curto do tema (até 3 palavras)", "descricao": "o que entra nesse tema, em uma linha"}],
+  "publico": "texto no formato abaixo"
+}
+Formato do "publico" (use exatamente estes 3 títulos, com itens começando por "- "):
+QUEM É O PÚBLICO
+- ...
+O QUE ELES SENTEM (e quase nunca falam)
+- ...
+OS "INIMIGOS" DO PÚBLICO
+- ..."""
+
+
+def sugerir_area(area: str, sobre: str = "") -> tuple[dict, dict]:
+    """Monta temas ("frentes") e público pra QUALQUER área de atuação.
+    Devolve (sugestão, uso)."""
+    area = (area or "").strip()[:120]
+    if not area:
+        raise ValueError("Informe a área de atuação.")
+    system = "\n\n".join([
+        "Você é estrategista de conteúdo pra advogados no Instagram. Conhece o dia a dia das várias áreas do "
+        "Direito no Brasil e o que o cliente leigo sente em cada uma.",
+        "TAREFA: pra área informada, defina de 3 a 5 temas (frentes) que rendem conteúdo educativo e útil pro "
+        "cliente final, e descreva o público: quem é, o que sente e quem ele culpa quando algo dá errado. "
+        "Linguagem simples, sem juridiquês, sem promessas de resultado.",
+        SAIDA_JSON_AREA,
+    ])
+    pedido = f"ÁREA DE ATUAÇÃO: {area}"
+    if (sobre or "").strip():
+        pedido += f"\nCONTEXTO DO ADVOGADO: {sobre.strip()[:800]}"
+    resposta = _cliente().messages.create(model=MODELO, max_tokens=2000, system=system,
+                                          messages=[{"role": "user", "content": pedido}])
+    dados = _extrair_json(_ultimo_texto(resposta))
+    frentes = []
+    for f in dados.get("frentes") or []:
+        nome = _sem_travessao(str((f or {}).get("nome", "")))[:60]
+        if nome:
+            frentes.append({"nome": nome, "descricao": _sem_travessao(str(f.get("descricao", "")))[:300]})
+    publico = _sem_travessao(str(dados.get("publico") or ""))[:6000]
+    if not frentes or not publico:
+        raise RuntimeError("A IA não conseguiu montar os temas dessa área. Tente escrever a área de outro jeito.")
+    return {"area": _sem_travessao(str(dados.get("area") or area))[:200], "frentes": frentes[:6], "publico": publico}, extrair_uso(resposta)
 
 
 def texto_legenda_completa(dados: dict) -> str:

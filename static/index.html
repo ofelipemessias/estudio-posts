@@ -385,7 +385,11 @@
         <label>Temas da área</label>
         <div class="info" style="margin-top:0; margin-bottom:10px;">Os grandes temas em que esse advogado atua. Viram as opções de "Tema da área" e o foco do radar.</div>
         <div id="p-frentes"></div>
-        <button class="secundario" id="btn-add-frente">+ Adicionar tema</button>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="secundario" id="btn-add-frente">+ Adicionar tema</button>
+          <button class="secundario" id="btn-sugerir-area">✨ Sugerir temas e público com IA</button>
+        </div>
+        <div class="info">Usa a "Área de atuação" (e o "Sobre", se preenchido) pra montar temas e público. Você revisa antes de salvar.</div>
       </div>
       <div class="cartao">
         <h3 style="margin-top:0;">Público</h3>
@@ -413,8 +417,11 @@
   <p class="info" id="dlg-novo-texto" style="margin-top:-6px;"></p>
   <div class="campo"><label for="novo-nome">Nome exibido nas artes</label><input id="novo-nome" placeholder="Ex.: Dr. João Silva"></div>
   <div class="campo"><label for="novo-handle">@ do Instagram</label><input id="novo-handle" placeholder="@joaosilvaadv"></div>
-  <div class="campo"><label for="novo-modelo">Começar a partir do modelo</label><select id="novo-modelo"></select>
-    <div class="info">Já vem com temas e público prontos pra área. Dá pra editar tudo depois.</div></div>
+  <div class="campo"><label for="novo-modelo">Sua área de atuação</label><select id="novo-modelo"></select>
+    <div class="info">Já vem com temas e público prontos. Se a sua área não estiver na lista, escolha "Outra área" e digite.</div></div>
+  <div class="campo oculto" id="campo-area-outra"><label for="novo-area-outra">Qual é a sua área?</label>
+    <input id="novo-area-outra" placeholder="Ex.: Direito Agrário, Direito Desportivo, Direito Eleitoral...">
+    <div class="info">A IA monta os temas e o público da sua área. Leva uns segundos.</div></div>
   <div style="display:flex; gap:8px; justify-content:flex-end;">
     <button class="secundario" id="btn-cancelar-novo">Cancelar</button>
     <button class="primario" style="width:auto;" id="btn-criar-perfil">Criar perfil</button>
@@ -681,21 +688,34 @@
     $("dlg-novo-titulo").textContent = obrigatorio ? "Bem-vindo! Vamos montar seu perfil" : "Novo perfil";
     $("dlg-novo-texto").textContent = obrigatorio ? "Escolha sua área. Depois você completa temas, público e seus posts antigos na aba \"Perfil\"." : "";
     $("btn-cancelar-novo").classList.toggle("oculto", dialogoObrigatorio);
+    $("campo-area-outra").classList.toggle("oculto", $("novo-modelo").value !== "em_branco");
     $("dlg-novo").showModal();
   }
   $("dlg-novo").addEventListener("cancel", (e) => { if (dialogoObrigatorio) e.preventDefault(); });
   $("btn-novo-perfil").addEventListener("click", () => abrirDialogoNovo(false));
   $("btn-cancelar-novo").addEventListener("click", () => $("dlg-novo").close());
+  const ehOutraArea = () => $("novo-modelo").value === "em_branco";
+  $("novo-modelo").addEventListener("change", () => $("campo-area-outra").classList.toggle("oculto", !ehOutraArea()));
+
   $("btn-criar-perfil").addEventListener("click", async () => {
     esconder("erro-novo");
+    const areaOutra = $("novo-area-outra").value.trim();
+    if (ehOutraArea() && !areaOutra){ mostrarErro("erro-novo", "Escreva qual é a sua área de atuação."); return; }
+    const btn = $("btn-criar-perfil");
+    btn.disabled = true; btn.textContent = ehOutraArea() ? "Montando seu perfil…" : "Criando…";
     try {
-      const r = await api("/api/perfis", json("POST", { nome_exibicao: $("novo-nome").value.trim(), handle: $("novo-handle").value.trim(), modelo: $("novo-modelo").value }));
+      const r = await api("/api/perfis", json("POST", { nome_exibicao: $("novo-nome").value.trim(), handle: $("novo-handle").value.trim(),
+        modelo: $("novo-modelo").value, area_outra: ehOutraArea() ? areaOutra : "" }));
       dialogoObrigatorio = false;
       $("dlg-novo").close();
+      $("novo-area-outra").value = "";
       $("painel").classList.add("oculto");
       abaAtual = "perfil";
       await carregarPerfis(r.id);
+      if (r.aviso) mostrarErro("erro-perfil", r.aviso);
+      else if (areaOutra){ $("ok-perfil").textContent = "Pronto! A IA montou os temas e o público da sua área. Dê uma revisada abaixo e ajuste o que quiser."; $("ok-perfil").classList.add("mostrar"); }
     } catch (e) { mostrarErro("erro-novo", e.message); }
+    finally { btn.disabled = false; btn.textContent = "Criar perfil"; }
   });
 
   // ─── Criar post ───
@@ -861,6 +881,22 @@
     return div;
   }
   $("btn-add-frente").addEventListener("click", () => $("p-frentes").appendChild(linhaFrente({ nome: "", descricao: "" })));
+
+  $("btn-sugerir-area").addEventListener("click", async () => {
+    esconder("erro-perfil"); esconder("ok-perfil");
+    const area = $("p-area").value.trim();
+    if (!area){ mostrarErro("erro-perfil", "Escreva sua área de atuação primeiro (campo \"Área de atuação\")."); $("p-area").focus(); return; }
+    if ($("p-publico").value.trim().length > 80 && !confirm("Isso vai substituir os temas e o público atuais pela sugestão da IA. Continuar?")) return;
+    const btn = $("btn-sugerir-area"); btn.disabled = true; btn.textContent = "Pensando na sua área…";
+    try {
+      const r = await api(`/api/perfis/${perfil.id}/sugerir_area`, json("POST", { area, sobre: $("p-sobre").value }));
+      $("p-area").value = r.area || area;
+      $("p-frentes").innerHTML = ""; r.frentes.forEach((f) => $("p-frentes").appendChild(linhaFrente(f)));
+      $("p-publico").value = r.publico;
+      $("ok-perfil").textContent = "Sugestão pronta! Revise os temas e o público e clique em \"Salvar perfil\"."; $("ok-perfil").classList.add("mostrar");
+    } catch (e) { mostrarErro("erro-perfil", e.message); }
+    finally { btn.disabled = false; btn.textContent = "✨ Sugerir temas e público com IA"; }
+  });
 
   const coresForm = () => {
     const c = {};

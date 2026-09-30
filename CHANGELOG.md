@@ -2,6 +2,25 @@
 
 Registro da evolução do Estúdio de Posts. Datas no formato AAAA-MM-DD.
 
+## [0.6.0] - 2026-09-30
+### Adicionado
+- Novos modelos prontos de área: **Tributário, Empresarial, Criminal,
+  Imobiliário e Saúde/Plano de Saúde** (além de Digital/Consumidor/Bancário,
+  Previdenciário, Trabalhista e Família).
+- **"Outra área (a IA monta pra você)"**: a pessoa digita qualquer área
+  (ex.: Direito Agrário) e a IA cria os temas e o público na hora de criar o
+  perfil. Se a IA falhar, o perfil é criado mesmo assim, com um aviso.
+- Botão **"✨ Sugerir temas e público com IA"** na aba Perfil: preenche o
+  formulário pra pessoa revisar antes de salvar (não salva sozinho).
+  Limite mensal por convidado em `LIMITE_SUGESTAO_AREA_MES` (padrão 10); o
+  custo entra no painel do dono.
+- Teste `tests/teste_area.py`.
+### Alterado
+- Perfis novos nascem com o estilo **Claro (fundo branco)**. Perfis já
+  existentes não mudam.
+- Na janela de novo perfil, "Começar a partir do modelo" virou
+  "Sua área de atuação".
+
 ## [0.5.0] - 2026-09-30
 ### Adicionado
 - Tela **"Quem vai gerar agora?"** (estilo seleção de perfis de streaming) pro

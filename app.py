@@ -51,6 +51,7 @@ PRECO_BUSCA = float(os.environ.get("PRECO_BUSCA_USD", "0.01"))
 COTACAO_DOLAR = float(os.environ.get("COTACAO_DOLAR", "5.50"))
 LIMITE_POSTS_PADRAO = int(os.environ.get("LIMITE_POSTS_MES_PADRAO", "60"))
 LIMITE_RADAR_PADRAO = int(os.environ.get("LIMITE_RADAR_MES_PADRAO", "12"))
+LIMITE_SUGESTAO_AREA_MES = int(os.environ.get("LIMITE_SUGESTAO_AREA_MES", "10"))
 VALIDADE_CONVITE_DIAS = 7
 
 # Nome do produto mostrado na interface (login, topo, aba do navegador,
@@ -221,7 +222,7 @@ def _perfil_dict(r) -> dict:
     return {
         "id": r["id"], "nome_exibicao": r["nome_exibicao"], "handle": r["handle"] or "", "area": r["area"] or "",
         "sobre": r["sobre"] or "", "frentes": json.loads(r["frentes"] or "[]"), "publico": r["publico"] or "",
-        "dna": r["dna"] or "", "estilo_visual": r["estilo_visual"] or "escuro", "cores": json.loads(r["cores"] or "{}"),
+        "dna": r["dna"] or "", "estilo_visual": r["estilo_visual"] or "claro", "cores": json.loads(r["cores"] or "{}"),
         "tem_avatar": bool(r["avatar"]), "avatar": r["avatar"], "criado_em": r["criado_em"],
         "usuario_id": r["usuario_id"], "voz": r["voz"] or "neutra",
     }
@@ -257,7 +258,7 @@ def identidade_e_paleta(perfil: dict, sobrescrever: dict | None = None):
     p.update({k: v for k, v in (sobrescrever or {}).items() if v not in (None, "")})
     avatar = str(PASTA_AVATARES / p["avatar"]) if p.get("avatar") else None
     identidade = {"nome": p["nome_exibicao"], "handle": p.get("handle") or "", "avatar_path": avatar}
-    estilo = p.get("estilo_visual") if p.get("estilo_visual") in render_post.ESTILOS else "escuro"
+    estilo = p.get("estilo_visual") if p.get("estilo_visual") in render_post.ESTILOS else "claro"
     return identidade, render_post.montar_paleta(estilo, p.get("cores") or {})
 
 
@@ -715,17 +716,54 @@ def criar_perfil():
     nome = (payload.get("nome_exibicao") or "").strip()
     if not nome:
         return jsonify({"erro": "Informe o nome exibido."}), 400
-    modelo = gerar_post.MODELOS_PERFIL.get(payload.get("modelo") or "em_branco", gerar_post.MODELOS_PERFIL["em_branco"])
+    modelo = dict(gerar_post.MODELOS_PERFIL.get(payload.get("modelo") or "em_branco", gerar_post.MODELOS_PERFIL["em_branco"]))
+    aviso = None
+    area_outra = (payload.get("area_outra") or "").strip()[:120]
+    if (payload.get("modelo") or "em_branco") == "em_branco" and area_outra:
+        # Área que não está na lista: a IA monta temas e público.
+        modelo["area"] = area_outra
+        try:
+            sugestao, uso = gerar_post.sugerir_area(area_outra)
+            registrar_uso(g.usuario["id"], None, "sugestao_area", uso)
+            modelo.update({"area": sugestao["area"], "frentes": sugestao["frentes"], "publico": sugestao["publico"]})
+        except Exception:
+            aviso = "Não consegui montar os temas da sua área agora. Use o botão \"Sugerir com IA\" na aba Perfil."
     perfil_id = uuid.uuid4().hex
     with conectar() as con:
         con.execute(
             "INSERT INTO perfis (id, nome_exibicao, handle, area, sobre, frentes, publico, dna, estilo_visual, cores, criado_em, usuario_id, voz) "
             "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (perfil_id, nome[:120], (payload.get("handle") or "").strip()[:80], modelo["area"], "",
-             json.dumps(modelo["frentes"], ensure_ascii=False), modelo["publico"], "", "escuro", "{}", agora(), g.usuario["id"],
+             json.dumps(modelo["frentes"], ensure_ascii=False), modelo["publico"], "", "claro", "{}", agora(), g.usuario["id"],
              payload.get("voz") if payload.get("voz") in gerar_post.VOZES else "eu"),
         )
-    return jsonify({"id": perfil_id}), 201
+    return jsonify({"id": perfil_id, "aviso": aviso}), 201
+
+
+@app.post("/api/perfis/<perfil_id>/sugerir_area")
+@login_obrigatorio
+def sugerir_area(perfil_id):
+    """Sugere temas e público pra área informada. NÃO salva: a tela
+    preenche o formulário e a pessoa revisa antes de salvar."""
+    perfil = perfil_autorizado(perfil_id)
+    if not perfil:
+        return jsonify({"erro": "Perfil não encontrado."}), 404
+    if g.usuario["papel"] != "dono":
+        with conectar() as con:
+            usadas = con.execute("SELECT COUNT(*) FROM uso_ia WHERE usuario_id=? AND tipo='sugestao_area' AND criado_em>=?",
+                                 (g.usuario["id"], _inicio_mes())).fetchone()[0]
+        if usadas >= LIMITE_SUGESTAO_AREA_MES:
+            return jsonify({"erro": "Você chegou ao limite de sugestões automáticas deste mês."}), 429
+    p = request.get_json(silent=True) or {}
+    area = (p.get("area") or perfil["area"] or "").strip()
+    if not area:
+        return jsonify({"erro": "Escreva sua área de atuação primeiro."}), 400
+    try:
+        sugestao, uso = gerar_post.sugerir_area(area, p.get("sobre") or perfil["sobre"])
+    except Exception as e:
+        return jsonify({"erro": f"Não consegui montar a sugestão agora ({type(e).__name__}). Tente de novo."}), 502
+    registrar_uso(perfil["usuario_id"] if g.usuario["papel"] == "dono" else g.usuario["id"], perfil_id, "sugestao_area", uso)
+    return jsonify(sugestao)
 
 
 @app.put("/api/perfis/<perfil_id>")
@@ -737,7 +775,7 @@ def salvar_perfil(perfil_id):
     nome = (p.get("nome_exibicao") or "").strip()
     if not nome:
         return jsonify({"erro": "Informe o nome exibido."}), 400
-    estilo = p.get("estilo_visual") if p.get("estilo_visual") in render_post.ESTILOS else "escuro"
+    estilo = p.get("estilo_visual") if p.get("estilo_visual") in render_post.ESTILOS else "claro"
     with conectar() as con:
         con.execute(
             "UPDATE perfis SET nome_exibicao=?, handle=?, area=?, sobre=?, frentes=?, publico=?, dna=?, estilo_visual=?, cores=?, voz=? WHERE id=?",
