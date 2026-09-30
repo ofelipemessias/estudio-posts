@@ -2,6 +2,26 @@
 
 Registro da evolução do Estúdio de Posts. Datas no formato AAAA-MM-DD.
 
+## [0.9.0] - 2026-09-30
+### Adicionado
+- **Publicação e agendamento automáticos no Instagram** (plano "Completo"),
+  pela API do Zernio (`motor/publicador.py`, só biblioteca padrão).
+  - Painel do dono: **"Liberar publicação automática (Completo)"** por
+    pessoa, com a etiqueta "Completo". O dono sempre pode. Desligar o
+    upgrade desconecta os Instagrams da pessoa (pra parar de pagar por eles).
+  - Aba Perfil: **"Conectar Instagram"** (login do próprio Instagram numa
+    página segura; conta profissional, sem precisar de Página do Facebook).
+    O retorno é conferido direto na API antes de salvar a conta.
+  - No post: **"Publicar agora"** ou **agendar** com data e hora (horário de
+    Brasília, de 5 minutos a 6 meses à frente). As artes sobem direto pro
+    armazenamento do Zernio por link temporário (nunca ficam públicas no
+    servidor). Reels continua manual (precisa de vídeo).
+  - Nova aba **Agenda**: agendados, publicados (com link), erros e cancelar.
+  - Quem não tem o upgrade vê os recursos com cadeado ("plano Completo").
+  - Apagar um perfil desconecta o Instagram dele.
+- Variável `ZERNIO_API_KEY` (em branco = recurso desligado).
+- Teste `tests/teste_publicacao.py`.
+
 ## [0.8.0] - 2026-09-30
 ### Adicionado
 - Botão **"📱 Postar pelo celular"** no post: copia a legenda com as

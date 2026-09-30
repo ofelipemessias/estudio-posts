@@ -23,18 +23,18 @@ import sqlite3
 import threading
 import time
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
-from flask import Flask, Response, g, jsonify, request, send_file, send_from_directory, session
+from flask import Flask, Response, g, jsonify, redirect, request, send_file, send_from_directory, session
 from markupsafe import escape
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
-from motor import gerar_post, render_post
+from motor import gerar_post, publicador, render_post
 
 BASE = Path(__file__).resolve().parent
 DADOS = Path(os.environ.get("DADOS_DIR", BASE / "dados"))
@@ -191,6 +191,27 @@ def iniciar_banco():
             con.execute("ALTER TABLE perfis ADD COLUMN usuario_id TEXT")
         if "voz" not in colunas:
             con.execute("ALTER TABLE perfis ADD COLUMN voz TEXT NOT NULL DEFAULT 'neutra'")
+        for coluna in ("zernio_profile_id", "ig_account_id", "ig_username"):
+            if coluna not in colunas:
+                con.execute(f"ALTER TABLE perfis ADD COLUMN {coluna} TEXT")
+        cols_u = [r[1] for r in con.execute("PRAGMA table_info(usuarios)").fetchall()]
+        if "publicacao_auto" not in cols_u:
+            con.execute("ALTER TABLE usuarios ADD COLUMN publicacao_auto INTEGER NOT NULL DEFAULT 0")
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS agendamentos (
+                id TEXT PRIMARY KEY,
+                post_id TEXT NOT NULL,
+                perfil_id TEXT NOT NULL,
+                usuario_id TEXT,
+                zernio_post_id TEXT,
+                quando TEXT,
+                status TEXT NOT NULL,
+                url TEXT,
+                erro TEXT,
+                criado_em TEXT NOT NULL,
+                atualizado_em TEXT NOT NULL
+            )""")
+        con.execute("UPDATE agendamentos SET status='erro', erro='Interrompido (o app foi reiniciado durante o envio). Tente de novo.' WHERE status='enviando'")
         for tabela in ("posts", "pautas"):
             cols = [r[1] for r in con.execute(f"PRAGMA table_info({tabela})").fetchall()]
             if "usuario_id" not in cols:
@@ -232,6 +253,8 @@ def _perfil_dict(r) -> dict:
         "dna": r["dna"] or "", "estilo_visual": r["estilo_visual"] or "claro", "cores": json.loads(r["cores"] or "{}"),
         "tem_avatar": bool(r["avatar"]), "avatar": r["avatar"], "criado_em": r["criado_em"],
         "usuario_id": r["usuario_id"], "voz": r["voz"] or "neutra",
+        "ig_username": r["ig_username"], "ig_conectado": bool(r["ig_account_id"]),
+        "zernio_profile_id": r["zernio_profile_id"], "ig_account_id": r["ig_account_id"],
     }
 
 
@@ -400,7 +423,14 @@ def _dados_eu(u: dict) -> dict:
         "acesso_ate": u["acesso_ate"], "situacao": situacao_acesso(u),
         "limite_posts_mes": u["limite_posts_mes"], "limite_radar_mes": u["limite_radar_mes"],
         "posts_mes": contagem_mes(u["id"], "posts"), "radar_mes": contagem_mes(u["id"], "pautas"),
+        "publicacao": {"configurada": publicador.configurado(), "liberada": pode_publicar(u)},
     }
+
+
+def pode_publicar(u: dict) -> bool:
+    """Publicação automática: sempre pro dono; pro convidado só se o dono
+    liberou (upgrade pago por fora, pela Asaas)."""
+    return u["papel"] == "dono" or bool(u.get("publicacao_auto"))
 
 
 @app.post("/api/login")
@@ -512,6 +542,7 @@ def admin_listar():
                 "situacao": situacao_acesso(u), "dias_acesso": u["dias_acesso"], "acesso_ate": u["acesso_ate"],
                 "limite_posts_mes": u["limite_posts_mes"], "limite_radar_mes": u["limite_radar_mes"],
                 "pagante": bool(u["pagante"]), "observacao": u["observacao"] or "",
+                "publicacao_auto": bool(u["publicacao_auto"]),
                 "ultimo_acesso": u["ultimo_acesso"], "criado_em": u["criado_em"], "perfis": perfis,
                 "posts_mes": contagem_mes(u["id"], "posts"), "radar_mes": contagem_mes(u["id"], "pautas"),
                 "posts_total": posts_total, "custo_mes_usd": round(uso_mes, 4), "custo_total_usd": round(uso_total, 4),
@@ -589,6 +620,16 @@ def admin_alterar(usuario_id):
             token, expira = _novo_token()
             con.execute("UPDATE usuarios SET token_convite=?, convite_expira=? WHERE id=?", (token, expira, usuario_id))
             return jsonify({"link_convite": _link_convite(token)})
+        elif acao == "publicacao":
+            ativo = bool(p.get("ativo"))
+            con.execute("UPDATE usuarios SET publicacao_auto=? WHERE id=?", (1 if ativo else 0, usuario_id))
+            if not ativo:
+                # Desligou o upgrade: desconecta os Instagrams dessa pessoa pra
+                # parar de pagar por eles na plataforma de publicação.
+                contas = con.execute("SELECT id, ig_account_id FROM perfis WHERE usuario_id=? AND ig_account_id IS NOT NULL", (usuario_id,)).fetchall()
+                for pid, conta in contas:
+                    publicador.desconectar(conta)
+                    con.execute("UPDATE perfis SET ig_account_id=NULL, ig_username=NULL WHERE id=?", (pid,))
         elif acao == "editar":
             con.execute(
                 "UPDATE usuarios SET nome=?, limite_posts_mes=?, limite_radar_mes=?, pagante=?, observacao=? WHERE id=?",
@@ -613,6 +654,207 @@ def admin_remover(usuario_id):
         _apagar_perfil_completo(pid)
     with conectar() as con:
         con.execute("DELETE FROM usuarios WHERE id=?", (usuario_id,))
+    return jsonify({"ok": True})
+
+
+# ═════════════════════════ Publicação no Instagram (Zernio) ═════════════════════════
+
+FUSO_BR = timezone(timedelta(hours=-3))  # Brasil sem horário de verão desde 2019
+FINAIS = ("publicado", "erro", "cancelado")
+
+
+def _exigir_publicacao(perfil):
+    if not publicador.configurado():
+        return jsonify({"erro": "A publicação automática ainda não foi configurada no servidor."}), 503
+    if not pode_publicar(g.usuario):
+        return jsonify({"erro": "A publicação automática faz parte do plano Completo. Fale com quem te convidou pra liberar.",
+                        "codigo": "sem_upgrade"}), 403
+    return None
+
+
+@app.post("/api/perfis/<perfil_id>/instagram/conectar")
+@login_obrigatorio
+def conectar_instagram(perfil_id):
+    perfil = perfil_autorizado(perfil_id)
+    if not perfil:
+        return jsonify({"erro": "Perfil não encontrado."}), 404
+    bloqueio = _exigir_publicacao(perfil)
+    if bloqueio:
+        return bloqueio
+    try:
+        zid = perfil["zernio_profile_id"]
+        if not zid:
+            zid = publicador.criar_perfil(f"{perfil['nome_exibicao']} ({perfil_id[:6]})")
+            with conectar() as con:
+                con.execute("UPDATE perfis SET zernio_profile_id=? WHERE id=?", (zid, perfil_id))
+        volta = request.host_url.rstrip("/") + "/instagram/conectado?" + urlencode({"perfil": perfil_id})
+        return jsonify({"url": publicador.link_conexao(zid, volta)})
+    except publicador.ErroPublicacao as e:
+        return jsonify({"erro": str(e)}), 502
+
+
+@app.get("/instagram/conectado")
+def instagram_conectado():
+    """O navegador volta pra cá depois do login no Instagram. Nada que vem
+    na URL é confiado: a conta é conferida direto na API do Zernio."""
+    uid = session.get("uid")
+    u = buscar_usuario(usuario_id=uid) if uid else None
+    if not u or situacao_acesso(u) != "ativo":
+        return redirect("/")
+    g.usuario = u
+    perfil = perfil_autorizado(request.args.get("perfil", ""))
+    if not perfil or not perfil["zernio_profile_id"] or not pode_publicar(u):
+        return redirect("/?instagram=erro")
+    try:
+        contas = [c for c in publicador.contas_instagram(perfil["zernio_profile_id"]) if c.get("_id")]
+    except publicador.ErroPublicacao:
+        return redirect("/?instagram=erro")
+    escolhida = next((c for c in contas if c["_id"] == request.args.get("accountId")), None) or (contas[-1] if contas else None)
+    if not escolhida:
+        return redirect("/?instagram=erro")
+    antiga = perfil["ig_account_id"]
+    with conectar() as con:
+        con.execute("UPDATE perfis SET ig_account_id=?, ig_username=? WHERE id=?",
+                    (escolhida["_id"], (escolhida.get("username") or "")[:80], perfil["id"]))
+    if antiga and antiga != escolhida["_id"]:
+        publicador.desconectar(antiga)
+    return redirect(f"/?instagram=conectado&perfil={perfil['id']}")
+
+
+@app.post("/api/perfis/<perfil_id>/instagram/desconectar")
+@login_obrigatorio
+def desconectar_instagram(perfil_id):
+    perfil = perfil_autorizado(perfil_id)
+    if not perfil:
+        return jsonify({"erro": "Perfil não encontrado."}), 404
+    if perfil["ig_account_id"] and publicador.configurado():
+        publicador.desconectar(perfil["ig_account_id"])
+    with conectar() as con:
+        con.execute("UPDATE perfis SET ig_account_id=NULL, ig_username=NULL WHERE id=?", (perfil_id,))
+    return jsonify({"ok": True})
+
+
+def _rodar_publicacao(ag_id, post, perfil, quando):
+    try:
+        pasta = PASTA_POSTS / post["id"]
+        urls = []
+        for i in range(1, len(post["slides"]) + 1):
+            arquivo = pasta / f"slide_{i:02d}.png"
+            urls.append(publicador.enviar_imagem(arquivo.read_bytes(), f"{post['id'][:8]}_{i:02d}.png"))
+        legenda = gerar_post.texto_legenda_completa(post)
+        r = publicador.criar_post(perfil["ig_account_id"], legenda, urls, quando, id_requisicao=ag_id)
+        with conectar() as con:
+            con.execute("UPDATE agendamentos SET zernio_post_id=?, status=?, url=?, erro=?, atualizado_em=? WHERE id=?",
+                        (r["id"], r["status"], r["url"], r["erro"], agora(), ag_id))
+    except publicador.ErroPublicacao as e:
+        with conectar() as con:
+            con.execute("UPDATE agendamentos SET status='erro', erro=?, atualizado_em=? WHERE id=?", (str(e), agora(), ag_id))
+    except Exception as e:
+        with conectar() as con:
+            con.execute("UPDATE agendamentos SET status='erro', erro=?, atualizado_em=? WHERE id=?",
+                        (f"Falha inesperada ({type(e).__name__}). Tente de novo.", agora(), ag_id))
+
+
+@app.post("/api/posts/<post_id>/publicar")
+@login_obrigatorio
+def publicar_post(post_id):
+    post = post_autorizado(post_id)
+    if not post or post["status"] != "concluido":
+        return jsonify({"erro": "Post não encontrado ou ainda não concluído."}), 404
+    perfil = buscar_perfil(post["perfil_id"])
+    bloqueio = _exigir_publicacao(perfil)
+    if bloqueio:
+        return bloqueio
+    if post["formato"] == "reels":
+        return jsonify({"erro": "Reels precisa de vídeo, então ainda não dá pra publicar automático. Grave o vídeo e poste pelo app."}), 400
+    if not perfil["ig_account_id"]:
+        return jsonify({"erro": "Conecte o Instagram deste perfil primeiro (aba Perfil)."}), 400
+    quando = (request.get_json(silent=True) or {}).get("quando") or None
+    if quando:
+        try:
+            dt = datetime.strptime(quando, "%Y-%m-%dT%H:%M").replace(tzinfo=FUSO_BR)
+        except ValueError:
+            return jsonify({"erro": "Data e hora inválidas."}), 400
+        agora_br = datetime.now(FUSO_BR)
+        if dt < agora_br + timedelta(minutes=5):
+            return jsonify({"erro": "Escolha um horário pelo menos 5 minutos no futuro."}), 400
+        if dt > agora_br + timedelta(days=180):
+            return jsonify({"erro": "Dá pra agendar até 6 meses à frente."}), 400
+    with conectar() as con:
+        pendentes = con.execute("SELECT COUNT(*) FROM agendamentos WHERE perfil_id=? AND status IN ('enviando','agendado','publicando')",
+                                (perfil["id"],)).fetchone()[0]
+    if pendentes >= 60:
+        return jsonify({"erro": "Esse perfil já tem 60 publicações na fila. Espere algumas saírem."}), 429
+    ag_id = uuid.uuid4().hex
+    with conectar() as con:
+        con.execute("INSERT INTO agendamentos (id, post_id, perfil_id, usuario_id, quando, status, criado_em, atualizado_em) "
+                    "VALUES (?,?,?,?,?, 'enviando', ?, ?)", (ag_id, post["id"], perfil["id"], g.usuario["id"], quando, agora(), agora()))
+    threading.Thread(target=_rodar_publicacao, args=(ag_id, post, perfil, quando), daemon=True).start()
+    return jsonify({"id": ag_id}), 202
+
+
+def _agendamento_dict(r, titulos) -> dict:
+    return {"id": r["id"], "post_id": r["post_id"], "titulo": titulos.get(r["post_id"], "Post"), "quando": r["quando"],
+            "status": r["status"], "url": r["url"], "erro": r["erro"], "criado_em": r["criado_em"]}
+
+
+def _atualizar_status(linhas):
+    """Pergunta ao Zernio o status do que ainda não terminou (no máximo
+    10 por vez, e só o que não foi conferido no último minuto)."""
+    limite = (datetime.now() - timedelta(minutes=1)).isoformat(timespec="seconds")
+    agora_br = datetime.now(FUSO_BR).strftime("%Y-%m-%dT%H:%M")
+    conferidos = 0
+    for r in linhas:
+        if conferidos >= 10 or r["status"] in FINAIS or r["status"] == "enviando" or not r["zernio_post_id"]:
+            continue
+        if r["atualizado_em"] > limite or (r["status"] == "agendado" and r["quando"] and r["quando"] > agora_br):
+            continue
+        conferidos += 1
+        try:
+            v = publicador.ver_post(r["zernio_post_id"])
+        except publicador.ErroPublicacao:
+            continue
+        with conectar() as con:
+            con.execute("UPDATE agendamentos SET status=?, url=COALESCE(?, url), erro=?, atualizado_em=? WHERE id=?",
+                        (v["status"], v["url"], v["erro"], agora(), r["id"]))
+
+
+@app.get("/api/perfis/<perfil_id>/agenda")
+@login_obrigatorio
+def agenda(perfil_id):
+    if not perfil_autorizado(perfil_id):
+        return jsonify({"erro": "Perfil não encontrado."}), 404
+    consulta = "SELECT * FROM agendamentos WHERE perfil_id=? ORDER BY COALESCE(quando, substr(criado_em,1,16)) DESC LIMIT 100"
+    with conectar() as con:
+        linhas = [dict(r) for r in con.execute(consulta, (perfil_id,)).fetchall()]
+    if publicador.configurado():
+        _atualizar_status(linhas)
+        with conectar() as con:
+            linhas = [dict(r) for r in con.execute(consulta, (perfil_id,)).fetchall()]
+    with conectar() as con:
+        titulos = {r["id"]: (r["titulo_interno"] or r["tema"]) for r in con.execute("SELECT id, titulo_interno, tema FROM posts WHERE perfil_id=?", (perfil_id,)).fetchall()}
+    return jsonify([_agendamento_dict(r, titulos) for r in linhas])
+
+
+@app.delete("/api/agendamentos/<ag_id>")
+@login_obrigatorio
+def cancelar_agendamento(ag_id):
+    with conectar() as con:
+        r = con.execute("SELECT * FROM agendamentos WHERE id=?", (ag_id,)).fetchone()
+    if not r or not perfil_autorizado(r["perfil_id"]):
+        return jsonify({"erro": "Agendamento não encontrado."}), 404
+    if r["status"] == "publicado":
+        return jsonify({"erro": "Esse post já foi publicado. Pra tirar do ar, apague pelo Instagram."}), 400
+    if r["status"] == "enviando":
+        return jsonify({"erro": "Ainda enviando as artes. Espere alguns segundos e tente de novo."}), 409
+    if r["zernio_post_id"] and r["status"] != "cancelado":
+        try:
+            publicador.cancelar_post(r["zernio_post_id"])
+        except publicador.ErroPublicacao as e:
+            if r["status"] != "erro":
+                return jsonify({"erro": str(e)}), 502
+    with conectar() as con:
+        con.execute("UPDATE agendamentos SET status='cancelado', atualizado_em=? WHERE id=?", (agora(), ag_id))
     return jsonify({"ok": True})
 
 
@@ -668,7 +910,7 @@ def listar_perfis():
     saida = []
     with conectar() as con:
         for r in linhas:
-            d = {k: v for k, v in _perfil_dict(r).items() if k != "avatar"}
+            d = {k: v for k, v in _perfil_dict(r).items() if k not in ("avatar", "zernio_profile_id", "ig_account_id")}
             d["de_cliente"] = r["dono_papel"] == "cliente"
             d["cliente_nome"] = r["dono_nome"] if d["de_cliente"] else None
             d.update(_resumo_perfil(con, d, r["avatar"], inicio))
@@ -807,6 +1049,10 @@ def _apagar_perfil_completo(perfil_id):
         shutil.rmtree(PASTA_POSTS / pid, ignore_errors=True)
     if perfil.get("avatar"):
         (PASTA_AVATARES / perfil["avatar"]).unlink(missing_ok=True)
+    if perfil.get("ig_account_id") and publicador.configurado():
+        publicador.desconectar(perfil["ig_account_id"])  # para de pagar pela conta
+    with conectar() as con:
+        con.execute("DELETE FROM agendamentos WHERE perfil_id=?", (perfil_id,))
 
 
 @app.delete("/api/perfis/<perfil_id>")

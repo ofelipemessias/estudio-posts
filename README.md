@@ -28,6 +28,21 @@ No celular, o botão **"📱 Postar pelo celular"** do post copia a legenda
 ordem do carrossel: é só escolher o Instagram, "Feed" e colar a legenda.
 No computador, use "Baixar tudo (.zip)".
 
+### Publicação automática (plano Completo)
+
+Com `ZERNIO_API_KEY` no `.env` ([Zernio](https://zernio.com), cobra por
+conta de Instagram conectada, as 2 primeiras grátis):
+
+1. No **Painel do dono → Ações → "Liberar publicação automática"**, depois
+   que a pessoa pagar o upgrade (a cobrança é por fora).
+2. A pessoa, na aba **Perfil → "Conectar Instagram"**, entra com o login do
+   Instagram. A conta precisa ser **profissional** (Empresa ou Criador).
+3. Em cada post: **"Publicar agora"** ou **agendar** (horário de Brasília).
+   Acompanhe tudo na aba **Agenda**.
+
+Desligar o upgrade ou apagar o perfil desconecta a conta no Zernio (e ela
+para de ser cobrada). Reels não publica automático (precisa de vídeo).
+
 ## Nome do produto
 
 O nome que aparece na interface vem de `APP_NOME` no `.env` (padrão:
@@ -91,12 +106,14 @@ python tests/teste_voz_e_texto.py
 python tests/teste_nome_app.py
 python tests/teste_perfis.py
 python tests/teste_area.py
+python tests/teste_publicacao.py
 ```
 
 ## Arquivos
 
 - `app.py`: servidor, contas, convites, painel e rotas
 - `motor/gerar_post.py`: prompts, regras da OAB, modelos de área, radar
+- `motor/publicador.py`: publicação e agendamento no Instagram (API do Zernio)
 - `motor/render_post.py`: desenho das artes (baseado no renderizador
   MIT da skill de carrossel tweet)
 - `fonts/`: Liberation Sans (SIL OFL, ver LICENSE-LiberationFonts.txt)

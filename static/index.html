@@ -165,6 +165,18 @@
   .perfil-atual b{font-size:13.5px; font-weight:700;}
   .perfil-atual .seta{color:#7FD1B9; font-size:14px; margin-left:4px;}
   .avatar-p{width:32px; height:32px; border-radius:50%; object-fit:cover; font-size:12px; flex-shrink:0;}
+  .bloco-pub{margin-top:16px; border:1px solid var(--borda); border-radius:12px; padding:14px 16px; background:var(--suave);}
+  .bloco-pub h4{margin:0 0 8px; font-size:14px;}
+  .linha-pub{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
+  .linha-pub input[type="datetime-local"]{width:auto; min-width:220px;}
+  .cadeado{color:var(--mudo); font-size:13px;}
+  .ig-conectado{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .ig-conectado b{font-size:15px;}
+  .pill.agendado{background:var(--info-bg); color:var(--info-txt);}
+  .pill.publicando, .pill.enviando{background:var(--alerta-bg); color:var(--alerta);}
+  .pill.publicado{background:var(--acento-2); color:var(--acento);}
+  .pill.cancelado{background:var(--suave-2); color:var(--mudo);}
+  .tag.completo{background:var(--acento-2); color:var(--acento);}
   dialog{border:none; border-radius:14px; padding:24px; width:min(460px, 92vw); background:var(--cartao); color:var(--tinta);}
   .btn-tema{display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:8px;
     background:var(--topo-2); border:1px solid var(--topo-borda); color:#fff; padding:0; flex-shrink:0;}
@@ -294,6 +306,7 @@
       <button class="aba ativo" data-aba="criar">Criar post</button>
       <button class="aba" data-aba="radar">Radar de pautas</button>
       <button class="aba" data-aba="posts">Posts gerados</button>
+      <button class="aba" data-aba="agenda">Agenda</button>
       <button class="aba" data-aba="perfil">Perfil</button>
     </div>
 
@@ -354,6 +367,17 @@
     </section>
 
     <!-- POSTS -->
+    <section id="aba-agenda" class="oculto">
+      <div class="cartao">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+          <h3 style="margin:0;">Publicações no Instagram</h3>
+          <button class="secundario" id="btn-atualizar-agenda">Atualizar</button>
+        </div>
+        <div class="info" id="agenda-info" style="margin-bottom:6px;"></div>
+        <ul class="lista" id="lista-agenda"></ul>
+      </div>
+    </section>
+
     <section id="aba-posts" class="oculto">
       <div class="cartao"><ul class="lista" id="lista-posts"></ul></div>
     </section>
@@ -375,6 +399,7 @@
             <button class="secundario perigo" id="btn-apagar-post">Apagar</button>
           </div>
           <div id="ajuda-celular" class="caixa oculto" style="margin-top:12px;"></div>
+          <div id="bloco-publicar" class="bloco-pub oculto"></div>
           <div class="info">Edite o texto embaixo de cada arte e clique em "Salvar edições". Use **palavra** pra destacar.</div>
           <div class="slides" id="det-slides"></div>
           <div id="det-roteiro-bloco" class="oculto" style="margin-top:18px;"><label>Roteiro do Reels</label><div class="caixa" id="det-roteiro"></div></div>
@@ -434,6 +459,10 @@
         <h3 style="margin-top:0;">Público</h3>
         <div class="info" style="margin-top:0; margin-bottom:10px;">Quem são, o que sentem e quem eles culpam. A IA usa isso em todo post e no radar.</div>
         <textarea id="p-publico" rows="14"></textarea>
+      </div>
+      <div class="cartao oculto" id="cartao-instagram">
+        <h3 style="margin-top:0;">Publicação automática no Instagram</h3>
+        <div id="ig-conteudo"></div>
       </div>
       <div class="cartao">
         <h3 style="margin-top:0;">DNA de escrita</h3>
@@ -574,6 +603,19 @@
     $("tom").innerHTML = opcoes.estilos_escrita.map(([v, d]) => `<option value="${v}">${esc(d.split(":")[0])}</option>`).join("");
     $("novo-modelo").innerHTML = opcoes.modelos_perfil.map(([v, r]) => `<option value="${v}">${esc(r)}</option>`).join("");
     $("p-voz").innerHTML = opcoes.vozes.map(([v, r]) => `<option value="${v}">${esc(r)}</option>`).join("");
+    const q = new URLSearchParams(window.location.search), ig = q.get("instagram");
+    if (ig){
+      history.replaceState(null, "", "/");
+      const alvo = q.get("perfil");
+      await carregarPerfis(alvo || localStorage.getItem("perfil_atual"));
+      if (perfil){
+        abaAtual = "perfil"; usarPerfil(perfis.find((p) => p.id === perfil.id));
+        if (ig === "conectado"){ $("ok-perfil").textContent = "✅ Instagram conectado! Agora você pode publicar e agendar posts deste perfil."; $("ok-perfil").classList.add("mostrar"); }
+        else mostrarErro("erro-perfil", "Não consegui confirmar a conexão do Instagram. Confira se a conta é profissional (Empresa ou Criador) e tente de novo.");
+        setTimeout(() => $("cartao-instagram").scrollIntoView({ behavior: "smooth", block: "center" }), 300);
+      }
+      return;
+    }
     await carregarPerfis(localStorage.getItem("perfil_atual"), { escolher: true });
   }
 
@@ -712,10 +754,11 @@
     abaAtual = aba;
     if (aba !== "detalhe" && timerPost){ clearInterval(timerPost); timerPost = null; }
     document.querySelectorAll(".aba").forEach((b) => b.classList.toggle("ativo", b.dataset.aba === aba || (aba === "detalhe" && b.dataset.aba === "posts")));
-    ["criar", "radar", "posts", "detalhe", "perfil"].forEach((a) => $("aba-" + a).classList.toggle("oculto", a !== aba));
+    ["criar", "radar", "posts", "agenda", "detalhe", "perfil"].forEach((a) => $("aba-" + a).classList.toggle("oculto", a !== aba));
     if (aba === "posts") carregarPosts();
     if (aba === "radar") carregarRadar();
     if (aba === "perfil") preencherPerfil();
+    if (aba === "agenda") carregarAgenda();
   }
   document.querySelectorAll(".aba").forEach((b) => b.addEventListener("click", () => mostrarAba(b.dataset.aba)));
 
@@ -878,6 +921,117 @@
     if (await atualizar()) timerPost = setInterval(async () => { if (!(await atualizar())){ clearInterval(timerPost); timerPost = null; } }, 5000);
   }
 
+  // ─── Publicação automática no Instagram (Zernio) ───
+  const pubInfo = () => (eu && eu.publicacao) || { configurada: false, liberada: false };
+  const MSG_UPGRADE = "faz parte do plano <b>Completo</b>. Fale com quem te convidou pra liberar.";
+
+  function renderCartaoInstagram(){
+    const pub = pubInfo(), card = $("cartao-instagram"), c = $("ig-conteudo");
+    card.classList.toggle("oculto", !pub.configurada);
+    if (!pub.configurada) return;
+    if (!pub.liberada){
+      c.innerHTML = `<p class="cadeado" style="margin:0;">🔒 Publicar e agendar direto no Instagram ${MSG_UPGRADE}<br>Enquanto isso, use o botão "📱 Postar pelo celular" nos seus posts.</p>`;
+      return;
+    }
+    if (perfil.ig_conectado){
+      c.innerHTML = `<div class="ig-conectado"><span>✅ Conectado como <b>@${esc(perfil.ig_username || "")}</b></span>
+        <button class="secundario perigo" id="btn-ig-desconectar">Desconectar</button></div>
+        <div class="info">Os posts deste perfil podem ser publicados ou agendados direto no Instagram.</div>`;
+      $("btn-ig-desconectar").onclick = async () => {
+        if (!confirm("Desconectar o Instagram deste perfil? Os agendamentos futuros deixam de ser publicados.")) return;
+        try { await api(`/api/perfis/${perfil.id}/instagram/desconectar`, { method: "POST" }); perfil.ig_conectado = false; perfil.ig_username = null; renderCartaoInstagram(); }
+        catch (e) { mostrarErro("erro-perfil", e.message); }
+      };
+      return;
+    }
+    c.innerHTML = `<p style="margin-top:0;">Conecte o Instagram deste perfil pra publicar e agendar posts direto pelo sistema.</p>
+      <div class="info" style="margin:0 0 12px;">A conta precisa ser <b>profissional</b> (Empresa ou Criador de conteúdo). Se ainda for pessoal, mude no app do Instagram em
+      Configurações → Tipo de conta e ferramentas → Mudar pra conta profissional. Você vai entrar com o seu login do Instagram numa página segura e voltar pra cá.</div>
+      <button class="primario" style="width:auto;" id="btn-ig-conectar">Conectar Instagram</button>`;
+    $("btn-ig-conectar").onclick = async () => {
+      const b = $("btn-ig-conectar"); b.disabled = true; b.textContent = "Abrindo o Instagram…";
+      try { const r = await api(`/api/perfis/${perfil.id}/instagram/conectar`, { method: "POST" }); window.location.href = r.url; }
+      catch (e) { mostrarErro("erro-perfil", e.message); b.disabled = false; b.textContent = "Conectar Instagram"; }
+    };
+  }
+
+  function valorDataLocal(d){
+    const z = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}`;
+  }
+
+  function renderBlocoPublicar(post){
+    const pub = pubInfo(), box = $("bloco-publicar");
+    box.classList.toggle("oculto", !pub.configurada);
+    if (!pub.configurada) return;
+    const titulo = `<h4>Publicar no Instagram${perfil.ig_conectado && pub.liberada ? ` <span class="info">(@${esc(perfil.ig_username || "")})</span>` : ""}</h4>`;
+    if (!pub.liberada){ box.innerHTML = titulo + `<div class="cadeado">🔒 Publicar agora e agendar ${MSG_UPGRADE}</div>`; return; }
+    if (post.formato === "reels"){ box.innerHTML = titulo + `<div class="cadeado">Reels precisa de vídeo: grave com o roteiro abaixo e poste pelo app do Instagram.</div>`; return; }
+    if (!perfil.ig_conectado){
+      box.innerHTML = titulo + `<div class="cadeado">Conecte o Instagram deste perfil na aba <button class="link" id="btn-ir-perfil">Perfil</button> pra publicar e agendar daqui.</div>`;
+      $("btn-ir-perfil").onclick = () => mostrarAba("perfil");
+      return;
+    }
+    const amanha = new Date(); amanha.setDate(amanha.getDate() + 1); amanha.setHours(9, 0, 0, 0);
+    const minimo = new Date(Date.now() + 10 * 60000);
+    box.innerHTML = titulo + `
+      <div class="linha-pub">
+        <button class="primario" style="width:auto;" id="btn-pub-agora">Publicar agora</button>
+        <span class="info" style="margin:0;">ou agendar pra</span>
+        <input type="datetime-local" id="pub-quando" value="${valorDataLocal(amanha)}" min="${valorDataLocal(minimo)}">
+        <button class="secundario" id="btn-pub-agendar">Agendar</button>
+      </div>
+      <div class="info">Horário de Brasília. Confira os alertas e a legenda antes. Se editou algo, clique primeiro em "Salvar edições e redesenhar".</div>
+      <div id="pub-msg"></div>`;
+    const enviar = async (quando, botao) => {
+      const rotulo = botao.textContent; botao.disabled = true; botao.textContent = "Enviando…";
+      try {
+        await api(`/api/posts/${post.id}/publicar`, json("POST", quando ? { quando } : {}));
+        $("pub-msg").innerHTML = `<div class="ok mostrar">${quando ? "📅 Agendado!" : "🚀 Enviado pra publicação!"} Acompanhe na aba <button class="link" id="btn-ir-agenda">Agenda</button>.</div>`;
+        $("btn-ir-agenda").onclick = () => mostrarAba("agenda");
+      } catch (e) { $("pub-msg").innerHTML = `<div class="erro mostrar">${esc(e.message)}</div>`; }
+      finally { botao.disabled = false; botao.textContent = rotulo; }
+    };
+    $("btn-pub-agora").onclick = () => { if (confirm(`Publicar agora no @${perfil.ig_username}?`)) enviar(null, $("btn-pub-agora")); };
+    $("btn-pub-agendar").onclick = () => {
+      const v = $("pub-quando").value;
+      if (!v){ $("pub-msg").innerHTML = `<div class="erro mostrar">Escolha a data e a hora.</div>`; return; }
+      enviar(v, $("btn-pub-agendar"));
+    };
+  }
+
+  const ROT_AGENDA = { enviando: "Enviando…", agendado: "Agendado", publicando: "Publicando…", publicado: "Publicado", erro: "Erro", cancelado: "Cancelado" };
+  let timerAgenda = null;
+  const dataHora = (v) => { const d = new Date(v.length === 16 ? v + ":00" : v); return d.toLocaleDateString("pt-BR") + " às " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }); };
+
+  async function carregarAgenda(){
+    if (timerAgenda){ clearTimeout(timerAgenda); timerAgenda = null; }
+    const lista = $("lista-agenda"), perfilId = perfil.id;
+    $("agenda-info").textContent = !pubInfo().configurada ? "A publicação automática ainda não foi configurada."
+      : perfil.ig_conectado ? `Conta conectada: @${perfil.ig_username}` : "Nenhum Instagram conectado neste perfil (aba Perfil).";
+    let itens;
+    try { itens = await api(`/api/perfis/${perfilId}/agenda`); } catch (e) { lista.innerHTML = `<li class="perigo">${esc(e.message)}</li>`; return; }
+    if (!perfil || perfil.id !== perfilId || abaAtual !== "agenda") return;
+    if (!itens.length){
+      lista.innerHTML = `<li style="display:block;">${vazio("Nada publicado ou agendado ainda", "Abra um post em \"Posts gerados\" e use \"Publicar agora\" ou \"Agendar\".")}</li>`;
+      return;
+    }
+    lista.innerHTML = itens.map((a) => `<li>
+      <div class="corpo"><div class="titulo">${esc(a.titulo)}</div>
+        <div class="meta">${a.quando ? "📅 " + dataHora(a.quando) : "🚀 Publicação imediata · " + dataHora(a.criado_em)}</div>
+        ${a.erro && a.status === "erro" ? `<div class="meta perigo">${esc(a.erro)}</div>` : ""}</div>
+      <span class="pill ${esc(a.status)}">${ROT_AGENDA[a.status] || esc(a.status)}</span>
+      ${a.url ? `<a class="link" href="${esc(a.url)}" target="_blank" rel="noopener noreferrer">Ver no Instagram</a>` : ""}
+      ${["agendado", "erro"].includes(a.status) ? `<button class="link perigo" data-cancelar="${esc(a.id)}">${a.status === "erro" ? "Remover" : "Cancelar"}</button>` : ""}
+    </li>`).join("");
+    lista.querySelectorAll("button[data-cancelar]").forEach((b) => b.addEventListener("click", async () => {
+      if (!confirm("Cancelar esse agendamento?")) return;
+      try { await api(`/api/agendamentos/${b.dataset.cancelar}`, { method: "DELETE" }); carregarAgenda(); } catch (e) { alert(e.message); }
+    }));
+    if (itens.some((a) => a.status === "enviando" || a.status === "publicando")) timerAgenda = setTimeout(() => { if (abaAtual === "agenda") carregarAgenda(); }, 8000);
+  }
+  $("btn-atualizar-agenda").addEventListener("click", carregarAgenda);
+
   // ─── Postar pelo celular ───
   // O celular só deixa abrir o menu "Compartilhar" logo depois do toque,
   // então as artes são baixadas ANTES (assim que o post abre) e o toque
@@ -944,6 +1098,7 @@
 
     $("btn-zip").onclick = () => { window.location.href = `/api/posts/${post.id}/arquivo`; };
     prepararPostarPeloCelular(post);
+    renderBlocoPublicar(post);
     $("btn-copiar").onclick = async () => {
       try { await navigator.clipboard.writeText(($("det-legenda").value + "\n\n" + post.hashtags.join(" ")).trim()); $("btn-copiar").textContent = "Copiado!"; }
       catch (e) { alert("Não consegui copiar. Selecione o texto e copie."); }
@@ -1012,6 +1167,7 @@
     $("p-avatar-status").textContent = p.tem_avatar ? "Foto cadastrada. Envie outra pra trocar." : "Sem foto: as artes usam a inicial do nome.";
     $("p-area").value = p.area; $("p-voz").value = p.voz || "neutra"; $("p-sobre").value = p.sobre; $("p-publico").value = p.publico; $("p-dna").value = p.dna;
     $("p-frentes").innerHTML = ""; p.frentes.forEach((f) => $("p-frentes").appendChild(linhaFrente(f)));
+    renderCartaoInstagram();
     atualizarPrevia();
   }
 
@@ -1069,7 +1225,7 @@
       <td><b>${esc(u.nome)}</b><div class="info" style="margin:0;">${esc(u.email)}</div>
         ${u.perfis.length ? `<div class="info" style="margin:0;">Perfil: ${esc(u.perfis.join(", "))}</div>` : ""}
         ${u.observacao ? `<div class="info" style="margin:0;">📝 ${esc(u.observacao)}</div>` : ""}</td>
-      <td><span class="tag ${u.situacao}">${ROT_SIT[u.situacao] || u.situacao}</span>${u.pagante ? ' <span class="tag pagante">Pagante</span>' : ""}</td>
+      <td><span class="tag ${u.situacao}">${ROT_SIT[u.situacao] || u.situacao}</span>${u.pagante ? ' <span class="tag pagante">Pagante</span>' : ""}${u.publicacao_auto ? ' <span class="tag completo">Completo</span>' : ""}</td>
       <td>${u.situacao === "convidado" ? (u.dias_acesso ? `${u.dias_acesso} dias após ativar` : "Ilimitado") : (u.acesso_ate ? dataCurta(u.acesso_ate) : "Ilimitado")}</td>
       <td>${u.posts_mes}/${u.limite_posts_mes} · ${u.posts_total}</td>
       <td>${u.radar_mes}/${u.limite_radar_mes}</td>
@@ -1085,6 +1241,9 @@
         <optgroup label="Acesso">
           ${u.situacao === "bloqueado" ? '<option value="desbloquear|">Reativar</option>' : '<option value="bloquear|">Pausar</option>'}
           <option value="link|">${u.situacao === "convidado" ? "Ver link do convite" : "Gerar link de nova senha"}</option>
+        </optgroup>
+        <optgroup label="Plano">
+          ${u.publicacao_auto ? '<option value="publicacao|0">Desligar publicação automática</option>' : '<option value="publicacao|1">Liberar publicação automática (Completo)</option>'}
         </optgroup>
         <optgroup label="Conta">
           <option value="editar|">Editar limites / pagante / observação</option>
@@ -1106,6 +1265,10 @@
       } else if (acao === "link"){
         const r = u.link_convite ? { link_convite: u.link_convite } : await api(`/api/admin/usuarios/${id}`, json("PUT", { acao: "novo_convite" }));
         prompt(`Link pra ${u.nome} (vale 7 dias). Copie e envie:`, r.link_convite);
+      } else if (acao === "publicacao"){
+        const ligar = dias === "1";
+        if (!ligar && !confirm(`Desligar a publicação automática de ${u.nome}? O Instagram conectado dela será desconectado (e você para de pagar por ele).`)) return;
+        await api(`/api/admin/usuarios/${id}`, json("PUT", { acao: "publicacao", ativo: ligar }));
       } else if (acao === "editar"){
         const limite = prompt("Posts por mês:", u.limite_posts_mes); if (limite === null) return;
         const radar = prompt("Buscas no radar por mês:", u.limite_radar_mes); if (radar === null) return;
