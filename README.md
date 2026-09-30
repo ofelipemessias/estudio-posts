@@ -21,6 +21,13 @@ dentro das regras de publicidade da OAB (Provimento 205/2021).
 - **Cobrança:** fora do sistema (link da Asaas). Aqui só existe a
   marcação "pagante" e as observações.
 
+## Publicar no Instagram
+
+No celular, o botão **"📱 Postar pelo celular"** do post copia a legenda
+(com as hashtags) e abre o menu de compartilhar já com todas as artes, na
+ordem do carrossel: é só escolher o Instagram, "Feed" e colar a legenda.
+No computador, use "Baixar tudo (.zip)".
+
 ## Nome do produto
 
 O nome que aparece na interface vem de `APP_NOME` no `.env` (padrão:

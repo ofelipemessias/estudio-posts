@@ -2,6 +2,15 @@
 
 Registro da evolução do Estúdio de Posts. Datas no formato AAAA-MM-DD.
 
+## [0.8.0] - 2026-09-30
+### Adicionado
+- Botão **"📱 Postar pelo celular"** no post: copia a legenda com as
+  hashtags e abre o menu de compartilhar do celular já com todas as artes
+  (na ordem do carrossel), pra mandar direto pro Instagram. As artes são
+  carregadas assim que o post abre, porque o celular só permite abrir o menu
+  de compartilhar logo após o toque. No computador, o botão explica como
+  fazer pelo celular.
+
 ## [0.7.1] - 2026-09-30
 ### Corrigido
 - Links de convite e de nova senha saíam com `http://` quando o app roda

@@ -369,10 +369,12 @@
         <div id="det-conteudo" class="oculto">
           <div id="det-alertas" class="aviso oculto" style="margin-top:14px;"><b>Conferir antes de publicar</b><ul id="det-lista-alertas" style="margin:6px 0 0; padding-left:18px;"></ul></div>
           <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:16px;">
-            <button class="primario" style="width:auto;" id="btn-zip">Baixar tudo (.zip)</button>
+            <button class="primario" style="width:auto;" id="btn-celular" disabled>📱 Postar pelo celular</button>
+            <button class="secundario" id="btn-zip">Baixar tudo (.zip)</button>
             <button class="secundario" id="btn-salvar-edicao">Salvar edições e redesenhar</button>
             <button class="secundario perigo" id="btn-apagar-post">Apagar</button>
           </div>
+          <div id="ajuda-celular" class="caixa oculto" style="margin-top:12px;"></div>
           <div class="info">Edite o texto embaixo de cada arte e clique em "Salvar edições". Use **palavra** pra destacar.</div>
           <div class="slides" id="det-slides"></div>
           <div id="det-roteiro-bloco" class="oculto" style="margin-top:18px;"><label>Roteiro do Reels</label><div class="caixa" id="det-roteiro"></div></div>
@@ -876,6 +878,57 @@
     if (await atualizar()) timerPost = setInterval(async () => { if (!(await atualizar())){ clearInterval(timerPost); timerPost = null; } }, 5000);
   }
 
+  // ─── Postar pelo celular ───
+  // O celular só deixa abrir o menu "Compartilhar" logo depois do toque,
+  // então as artes são baixadas ANTES (assim que o post abre) e o toque
+  // já chama o compartilhamento direto.
+  let arquivosCelular = null;
+  const podeCompartilharArquivos = (arquivos) => !!(navigator.canShare && navigator.share && navigator.canShare({ files: arquivos }));
+
+  async function baixarArtes(post){
+    const arquivos = [];
+    for (let i = 1; i <= post.slides.length; i++){
+      const r = await fetch(`/api/posts/${post.id}/slide/${i}`, { credentials: "same-origin", cache: "no-store" });
+      if (!r.ok) throw new Error("Não consegui carregar as artes.");
+      arquivos.push(new File([await r.blob()], `slide_${String(i).padStart(2, "0")}.png`, { type: "image/png" }));
+    }
+    return arquivos;
+  }
+
+  function ajudaCelular(html){
+    const box = $("ajuda-celular");
+    box.innerHTML = html; box.classList.remove("oculto");
+  }
+
+  function prepararPostarPeloCelular(post){
+    const btn = $("btn-celular");
+    arquivosCelular = null;
+    $("ajuda-celular").classList.add("oculto");
+    btn.disabled = true; btn.textContent = "📱 Preparando…";
+    const idAtual = post.id;
+    baixarArtes(post).then((arquivos) => {
+      if (!$("btn-celular") || !perfil) return;
+      arquivosCelular = { id: idAtual, arquivos };
+      btn.disabled = false; btn.textContent = "📱 Postar pelo celular";
+    }).catch(() => { btn.disabled = false; btn.textContent = "📱 Postar pelo celular"; });
+
+    btn.onclick = () => {
+      const legenda = ($("det-legenda").value + "\n\n" + (post.hashtags || []).join(" ")).trim();
+      // Copia a legenda no mesmo toque (antes do menu abrir).
+      const copia = navigator.clipboard ? navigator.clipboard.writeText(legenda).then(() => true, () => false) : Promise.resolve(false);
+      const arquivos = arquivosCelular && arquivosCelular.id === idAtual ? arquivosCelular.arquivos : null;
+      if (!arquivos || !podeCompartilharArquivos(arquivos)){
+        ajudaCelular(`<b>Esse botão funciona no celular.</b><br>Abra o ${esc(APP_NOME)} no celular (com o mesmo login), entre neste post e toque em "📱 Postar pelo celular".
+          <br><br>No computador, use "Baixar tudo (.zip)" e o botão "Copiar legenda + hashtags".`);
+        return;
+      }
+      navigator.share({ files: arquivos, title: post.titulo_interno || "Post", text: legenda })
+        .then(() => copia.then((ok) => ajudaCelular(`<b>✅ Pronto!</b> ${ok ? "A legenda já está copiada." : "Copie a legenda no botão \"Copiar legenda + hashtags\"."}
+          <br>No Instagram: escolha <b>Feed</b> (as artes entram como carrossel, na ordem), avance e <b>cole a legenda</b>.`)))
+        .catch((e) => { if (e && e.name !== "AbortError") ajudaCelular("Não consegui abrir o menu de compartilhar. Tente de novo ou use \"Baixar tudo (.zip)\"."); });
+    };
+  }
+
   function preencherPost(post){
     const grade = $("det-slides");
     const t = Date.now();
@@ -890,6 +943,7 @@
     $("det-conteudo").classList.remove("oculto");
 
     $("btn-zip").onclick = () => { window.location.href = `/api/posts/${post.id}/arquivo`; };
+    prepararPostarPeloCelular(post);
     $("btn-copiar").onclick = async () => {
       try { await navigator.clipboard.writeText(($("det-legenda").value + "\n\n" + post.hashtags.join(" ")).trim()); $("btn-copiar").textContent = "Copiado!"; }
       catch (e) { alert("Não consegui copiar. Selecione o texto e copie."); }
