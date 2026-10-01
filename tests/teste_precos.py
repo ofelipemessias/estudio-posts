@@ -84,6 +84,19 @@ ok(u["fundador"] == 1 and u["valor_assinatura"] == 97.0, "renovação do fundado
 painel = {x["email"]: x for x in dono.get("/api/admin/usuarios").json["usuarios"]}
 ok(painel["ana@x.com"]["ciclo"] == "anual" and painel["ana@x.com"]["fundador"] and not painel["carla@x.com"]["fundador"], "painel mostra anual e fundador")
 
+# prazo do fundador
+ok(ana.get("/api/assinatura").json["vagas_fundador_total"] == 2, "informa o total de vagas (pra mostrar 'X de Y preenchidas')")
+A.FUNDADOR_ATE = "2020-01-01"
+dani, ud = cliente("dani@x.com")
+with banco() as b: b.execute("UPDATE usuarios SET fundador=0")  # libera vagas, mas o prazo já passou
+a = dani.get("/api/assinatura").json
+ok(a["vagas_fundador"] == 0 and a["fundador_ate"] is None and {p["id"]: p for p in a["planos"]}["essencial"]["mensal"] == 147,
+   "prazo vencido: preço cheio mesmo com vagas sobrando")
+A.FUNDADOR_ATE = (datetime.now() + timedelta(days=5)).strftime("%Y-%m-%d")
+a = dani.get("/api/assinatura").json
+ok(a["vagas_fundador"] == 2 and a["fundador_ate"] == A.FUNDADOR_ATE and {p["id"]: p for p in a["planos"]}["essencial"]["mensal"] == 97,
+   "dentro do prazo: preço de fundador e data informada pra tela")
+
 print()
 print(f"{len(FALHAS)} falha(s)." if FALHAS else "Todos os testes passaram.")
 sys.exit(1 if FALHAS else 0)

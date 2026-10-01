@@ -69,12 +69,23 @@ PLANOS = {
     "completo": {"nome": "Completo", "valor": _preco("PRECO_COMPLETO", "197"), "fundador": _preco("PRECO_FUNDADOR_COMPLETO", "147"),
                  "itens": ["Tudo do Essencial", "Publicar direto no Instagram", "Agendar posts com data e hora", "Agenda de publicações"]},
 }
-FUNDADOR_VAGAS = int(os.environ.get("FUNDADOR_VAGAS", "30"))
+FUNDADOR_VAGAS = int(os.environ.get("FUNDADOR_VAGAS", "15"))
+# Último dia do preço de fundador (AAAA-MM-DD). Em branco = sem prazo, só vagas.
+FUNDADOR_ATE = (os.environ.get("FUNDADOR_ATE") or "").strip()
+
+
+def _fundador_no_prazo() -> bool:
+    if not FUNDADOR_ATE:
+        return True
+    try:
+        return datetime.now().date() <= datetime.strptime(FUNDADOR_ATE, "%Y-%m-%d").date()
+    except ValueError:
+        return True
 MESES_ANUAL = int(os.environ.get("MESES_ANUAL", "10"))
 
 
 def vagas_fundador_restantes() -> int:
-    if FUNDADOR_VAGAS <= 0:
+    if FUNDADOR_VAGAS <= 0 or not _fundador_no_prazo():
         return 0
     with conectar() as con:
         usadas = con.execute("SELECT COUNT(*) FROM usuarios WHERE fundador=1").fetchone()[0]
@@ -946,7 +957,8 @@ def ver_assinatura():
     return jsonify({
         "configurada": pagamentos.configurado(), "ambiente": pagamentos.ambiente(),
         "planos": [{"id": k, "nome": v["nome"], "itens": v["itens"], **precos_atuais()[k]} for k, v in PLANOS.items()],
-        "vagas_fundador": vagas_fundador_restantes(), "meses_anual": MESES_ANUAL,
+        "vagas_fundador": vagas_fundador_restantes(), "vagas_fundador_total": FUNDADOR_VAGAS,
+        "fundador_ate": FUNDADOR_ATE if _fundador_no_prazo() else None, "meses_anual": MESES_ANUAL,
         "ciclo": u["ciclo"] or "mensal", "valor_assinatura": u["valor_assinatura"], "fundador": bool(u["fundador"]),
         "plano": u["plano"], "status": u["assinatura_status"], "pagante": bool(u["pagante"]),
         "acesso_ate": u["acesso_ate"], "situacao": situacao_acesso(u), "tem_cadastro": bool(u["asaas_customer_id"]),

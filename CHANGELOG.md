@@ -2,6 +2,15 @@
 
 Registro da evolução do Estúdio de Posts. Datas no formato AAAA-MM-DD.
 
+## [0.12.1] - 2026-10-01
+### Alterado
+- Urgência real no preço de fundador: **prazo** (`FUNDADOR_ATE`, ex.:
+  2026-10-31) além do limite de vagas (padrão agora 15). Depois do prazo ou das
+  vagas, o sistema passa sozinho pro preço cheio.
+- A faixa mostra o prazo ("só até 31/10", "faltam 4 dias", "só até amanhã",
+  "só até hoje") e, quando já há inscritos, "9 de 15 já preenchidas" com uma
+  barra de progresso ("restam 2!" no fim). Sem inscritos, mostra só o total.
+
 ## [0.12.0] - 2026-10-01
 ### Adicionado
 - **Preço de fundador**: Essencial **R$ 97/mês** e Completo **R$ 147/mês**

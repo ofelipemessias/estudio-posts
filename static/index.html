@@ -178,6 +178,8 @@
   .ciclos .economia{color:var(--acento); font-size:11.5px; margin-left:4px;}
   .faixa-fundador{display:flex; gap:10px; align-items:center; flex-wrap:wrap; background:var(--acento-2); color:var(--acento); border-radius:10px;
     padding:10px 14px; font-size:13.5px; font-weight:600; margin-top:12px;}
+  .faixa-fundador .barra-vagas{flex-basis:100%; height:6px; background:rgba(0,0,0,.08); border-radius:99px; overflow:hidden;}
+  .faixa-fundador .barra-vagas span{display:block; height:100%; background:var(--acento);}
   .plano .riscado{font-size:15px; color:var(--mudo); text-decoration:line-through; font-weight:600; margin-left:6px;}
   .plano .equivale{font-size:12.5px; color:var(--mudo); margin-top:2px;}
   .plano .selo{position:absolute; top:-11px; right:16px; background:var(--acento); color:var(--acento-txt); font-size:11px; font-weight:800; padding:3px 10px; border-radius:99px;}
@@ -1082,6 +1084,24 @@
   }
   document.querySelectorAll('input[name="forma"]').forEach((r) => r.addEventListener("change", atualizarCamposCobranca));
 
+  function faixaFundador(a){
+    const total = a.vagas_fundador_total || 0, restam = a.vagas_fundador || 0, usadas = Math.max(0, total - restam);
+    let prazo = "";
+    if (a.fundador_ate){
+      // diferença em dias de calendário (hoje = 0, amanhã = 1)
+      const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+      const fim = new Date(a.fundador_ate + "T00:00:00"), dias = Math.round((fim - hoje) / 86400000);
+      const data = fim.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+      prazo = dias <= 0 ? " só até <b>hoje</b>" : dias === 1 ? " só até <b>amanhã</b>" : dias <= 7 ? ` só até <b>${data}</b> (faltam ${dias} dias)` : ` só até <b>${data}</b>`;
+    }
+    // Com ninguém inscrito, "0 de 15" espanta: mostra só o total.
+    const ou = prazo ? " ou" : "";
+    const vagas = !total ? "" : usadas === 0 ? `${ou} enquanto durarem as <b>${total} vagas</b>.`
+      : `${ou} enquanto durarem as vagas: <b>${usadas} de ${total}</b> já preenchidas${restam <= 3 ? `, ${restam === 1 ? "resta <b>1</b>" : `restam <b>${restam}</b>`}!` : "."}`;
+    return `<div class="faixa-fundador">🎁 <span><b>Preço de fundador</b>${prazo}${vagas || "."} O valor fica travado enquanto você mantiver a assinatura.</span>
+      ${total && usadas ? `<div class="barra-vagas"><span style="width:${Math.round(100 * usadas / total)}%;"></span></div>` : ""}</div>`;
+  }
+
   function renderPlanos(){
     const a = dadosAssinatura, anual = cicloEscolhido === "anual";
     $("txt-cartao").textContent = `Renovação automática todo ${anual ? "ano" : "mês"}. Você não precisa se preocupar com vencimento.`;
@@ -1089,8 +1109,7 @@
     const gratis = 12 - (a.meses_anual || 10);
     $("economia-anual").textContent = gratis > 0 ? ` ${gratis} meses grátis` : "";
     const fundador = a.planos.some((p) => p.fundador);
-    $("faixa-fundador").innerHTML = fundador ? `<div class="faixa-fundador">🎁 <span><b>Preço de fundador</b>: travado enquanto você mantiver a assinatura.
-      ${a.vagas_fundador ? `Restam <b>${a.vagas_fundador}</b> ${a.vagas_fundador === 1 ? "vaga" : "vagas"}.` : ""}</span></div>` : "";
+    $("faixa-fundador").innerHTML = fundador ? faixaFundador(a) : "";
     $("lista-planos").innerHTML = a.planos.map((p) => {
       const valor = anual ? p.anual : p.mensal, cheio = anual ? p.cheio_mensal * (a.meses_anual || 10) : p.cheio_mensal;
       return `<button type="button" class="plano ${p.id === planoEscolhido ? "escolhido" : ""}" data-plano="${esc(p.id)}">
