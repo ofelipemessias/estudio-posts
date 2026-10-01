@@ -10,7 +10,7 @@ RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOKEN = "t" * 40
 os.environ.update(DADOS_DIR=tempfile.mkdtemp(prefix="estudio_ass_"), ANTHROPIC_API_KEY="fake", SECRET_KEY="w"*40,
                   DONO_EMAIL="dono@teste.com", DONO_SENHA_INICIAL="senhadodono123", ASAAS_API_KEY="$aact_teste",
-                  ASAAS_WEBHOOK_TOKEN=TOKEN, PRECO_ESSENCIAL="197", PRECO_COMPLETO="247", ZERNIO_API_KEY="sk_x")
+                  ASAAS_WEBHOOK_TOKEN=TOKEN, PRECO_ESSENCIAL="197", PRECO_COMPLETO="247", FUNDADOR_VAGAS="0", ZERNIO_API_KEY="sk_x")
 sys.path.insert(0, RAIZ)
 import app as A
 from motor import pagamentos as PG, publicador as PU
@@ -25,12 +25,12 @@ PG.criar_cliente = lambda nome, email, doc, ref, tel, end: (CHAMADAS["clientes"]
 PG.atualizar_cliente = lambda cid, tel, end: CHAMADAS.setdefault("atualizados", []).append((cid, tel, end))
 PG.buscar_cep = lambda cep: {"rua": "Av. Teste", "bairro": "Centro", "cidade": "São José do Rio Preto", "uf": "SP", "ibge": "3549805"} if str(cep).startswith("15") else None
 END = {"cep": "15015000", "numero": "100", "rua": "Av. Teste", "bairro": "Centro", "complemento": "Sala 2"}
-PG.checkout_cartao = lambda dados, n, v, urls, ref: (CHAMADAS["checkouts"].append((dados, n, v, urls, ref)), {"id": "ck1", "url": "https://sandbox.asaas.com/checkoutSession/show?id=ck1"})[1]
+PG.checkout_cartao = lambda dados, n, v, urls, ref, ciclo="mensal": (CHAMADAS["checkouts"].append((dados, n, v, urls, ref)), {"id": "ck1", "url": "https://sandbox.asaas.com/checkoutSession/show?id=ck1"})[1]
 CLIENTES_ASAAS = {"cus_ana": {"email": "ana@x.com", "cpfCnpj": "52998224725", "postalCode": "15015000", "address": "Av. Teste",
                   "addressNumber": "100", "province": "Centro", "mobilePhone": "17991234567"},
                   "cus_checkout_ana": {"email": "ANA@x.com"}, "cus_estranho": {"email": "outra@pessoa.com"}}
 PG.ver_cliente = lambda cid: CLIENTES_ASAAS.get(cid, {})
-PG.assinatura_pix = lambda c, n, v, ref: (CHAMADAS["pix"].append((c, n, v)), {"id": "sub_pix", "url": "https://sandbox.asaas.com/i/123"})[1]
+PG.assinatura_pix = lambda c, n, v, ref, ciclo="mensal": (CHAMADAS["pix"].append((c, n, v)), {"id": "sub_pix", "url": "https://sandbox.asaas.com/i/123"})[1]
 PG.cancelar_assinatura = lambda sid: CHAMADAS["cancelados"].append(sid)
 PU.desconectar = lambda a: None
 
@@ -52,7 +52,7 @@ r = A.app.test_client().post("/api/login", json={"email": "ana@x.com", "senha": 
 ok(r.status_code == 200 and r.json["situacao"] == "expirado", "teste vencido: consegue entrar (pra assinar)")
 ok(ana.get("/api/eu").json["situacao"] == "expirado", "tela sabe que o teste venceu")
 a = ana.get("/api/assinatura").json
-ok(a["configurada"] and [p["valor"] for p in a["planos"]] == [197.0, 247.0], "planos e preços vêm do .env")
+ok(a["configurada"] and [p["mensal"] for p in a["planos"]] == [197.0, 247.0], "planos e preços vêm do .env")
 
 # --- assinar no cartão ---
 ok(ana.post("/api/assinatura/iniciar", json={"plano": "completo", "forma": "cartao", "cpf_cnpj": "52998224725", **END}).status_code == 400, "exige celular (o checkout do Asaas pede telefone)")

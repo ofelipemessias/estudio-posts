@@ -55,13 +55,41 @@ LIMITE_POSTS_PADRAO = int(os.environ.get("LIMITE_POSTS_MES_PADRAO", "60"))
 LIMITE_RADAR_PADRAO = int(os.environ.get("LIMITE_RADAR_MES_PADRAO", "12"))
 LIMITE_SUGESTAO_AREA_MES = int(os.environ.get("LIMITE_SUGESTAO_AREA_MES", "10"))
 # Planos (valores mensais em R$, mudam pelo .env) e tolerância de atraso.
+def _preco(nome, padrao):
+    return float(os.environ.get(nome) or padrao)
+
+
+# Preço cheio (PRECO_*) e preço de fundador (PRECO_FUNDADOR_*), mensais em R$.
+# Enquanto houver vagas de fundador (FUNDADOR_VAGAS), quem assina paga o
+# preço de fundador, travado na assinatura do Asaas. Anual = MESES_ANUAL x mensal.
 PLANOS = {
-    "essencial": {"nome": "Essencial", "valor": float(os.environ.get("PRECO_ESSENCIAL", "197")),
+    "essencial": {"nome": "Essencial", "valor": _preco("PRECO_ESSENCIAL", "147"), "fundador": _preco("PRECO_FUNDADOR_ESSENCIAL", "97"),
                   "itens": [f"Até {LIMITE_POSTS_PADRAO} posts por mês, no seu nicho", f"Radar de pautas ({LIMITE_RADAR_PADRAO} buscas por mês)",
                             "Artes prontas e legendas", "📱 Postar pelo celular"]},
-    "completo": {"nome": "Completo", "valor": float(os.environ.get("PRECO_COMPLETO", "247")),
+    "completo": {"nome": "Completo", "valor": _preco("PRECO_COMPLETO", "197"), "fundador": _preco("PRECO_FUNDADOR_COMPLETO", "147"),
                  "itens": ["Tudo do Essencial", "Publicar direto no Instagram", "Agendar posts com data e hora", "Agenda de publicações"]},
 }
+FUNDADOR_VAGAS = int(os.environ.get("FUNDADOR_VAGAS", "30"))
+MESES_ANUAL = int(os.environ.get("MESES_ANUAL", "10"))
+
+
+def vagas_fundador_restantes() -> int:
+    if FUNDADOR_VAGAS <= 0:
+        return 0
+    with conectar() as con:
+        usadas = con.execute("SELECT COUNT(*) FROM usuarios WHERE fundador=1").fetchone()[0]
+    return max(0, FUNDADOR_VAGAS - usadas)
+
+
+def precos_atuais() -> dict:
+    """Preços oferecidos agora, por plano e ciclo."""
+    fundador = vagas_fundador_restantes() > 0
+    saida = {}
+    for k, v in PLANOS.items():
+        mensal = v["fundador"] if fundador and v["fundador"] < v["valor"] else v["valor"]
+        saida[k] = {"mensal": round(mensal, 2), "anual": round(mensal * MESES_ANUAL, 2), "cheio_mensal": v["valor"],
+                    "fundador": fundador and mensal < v["valor"]}
+    return saida
 DIAS_TOLERANCIA = int(os.environ.get("DIAS_TOLERANCIA", "3"))
 VALIDADE_CONVITE_DIAS = 7
 
@@ -208,10 +236,16 @@ def iniciar_banco():
         if "publicacao_auto" not in cols_u:
             con.execute("ALTER TABLE usuarios ADD COLUMN publicacao_auto INTEGER NOT NULL DEFAULT 0")
         for coluna in ("asaas_customer_id", "asaas_subscription_id", "plano", "plano_pendente", "assinatura_status", "asaas_telefone_ok", "asaas_cadastro_ok",
-                       "asaas_checkout_pendente", "asaas_assinatura_pendente"):
+                       "asaas_checkout_pendente", "asaas_assinatura_pendente", "ciclo", "ciclo_pendente"):
             if coluna not in cols_u:
                 con.execute(f"ALTER TABLE usuarios ADD COLUMN {coluna} TEXT")
         con.execute("CREATE TABLE IF NOT EXISTS eventos_pagamento (id TEXT PRIMARY KEY, evento TEXT, recebido_em TEXT NOT NULL)")
+        cols_u2 = [r[1] for r in con.execute("PRAGMA table_info(usuarios)").fetchall()]
+        for coluna in ("fundador", "fundador_pendente"):
+            if coluna not in cols_u2:
+                con.execute(f"ALTER TABLE usuarios ADD COLUMN {coluna} INTEGER NOT NULL DEFAULT 0")
+        if "valor_assinatura" not in cols_u2:
+            con.execute("ALTER TABLE usuarios ADD COLUMN valor_assinatura REAL")
         con.execute("CREATE TABLE IF NOT EXISTS pagamentos_processados (id TEXT PRIMARY KEY, usuario_id TEXT, processado_em TEXT NOT NULL)")
         con.execute("""
             CREATE TABLE IF NOT EXISTS agendamentos (
@@ -590,7 +624,7 @@ def admin_listar():
                 "limite_posts_mes": u["limite_posts_mes"], "limite_radar_mes": u["limite_radar_mes"],
                 "pagante": bool(u["pagante"]), "observacao": u["observacao"] or "",
                 "publicacao_auto": bool(u["publicacao_auto"]),
-                "plano": u["plano"], "assinatura_status": u["assinatura_status"],
+                "plano": u["plano"], "assinatura_status": u["assinatura_status"], "ciclo": u["ciclo"], "fundador": bool(u["fundador"]),
                 "ultimo_acesso": u["ultimo_acesso"], "criado_em": u["criado_em"], "perfis": perfis,
                 "posts_mes": contagem_mes(u["id"], "posts"), "radar_mes": contagem_mes(u["id"], "pautas"),
                 "posts_total": posts_total, "custo_mes_usd": round(uso_mes, 4), "custo_total_usd": round(uso_total, 4),
@@ -911,7 +945,9 @@ def ver_assinatura():
     u = g.usuario
     return jsonify({
         "configurada": pagamentos.configurado(), "ambiente": pagamentos.ambiente(),
-        "planos": [{"id": k, **v} for k, v in PLANOS.items()],
+        "planos": [{"id": k, "nome": v["nome"], "itens": v["itens"], **precos_atuais()[k]} for k, v in PLANOS.items()],
+        "vagas_fundador": vagas_fundador_restantes(), "meses_anual": MESES_ANUAL,
+        "ciclo": u["ciclo"] or "mensal", "valor_assinatura": u["valor_assinatura"], "fundador": bool(u["fundador"]),
         "plano": u["plano"], "status": u["assinatura_status"], "pagante": bool(u["pagante"]),
         "acesso_ate": u["acesso_ate"], "situacao": situacao_acesso(u), "tem_cadastro": bool(u["asaas_customer_id"]),
         "cadastro_completo": bool(u["asaas_cadastro_ok"]),
@@ -945,8 +981,9 @@ def iniciar_assinatura():
     p = request.get_json(silent=True) or {}
     plano = p.get("plano")
     forma = p.get("forma")
-    if plano not in PLANOS or forma not in ("cartao", "pix"):
-        return jsonify({"erro": "Escolha o plano e a forma de pagamento."}), 400
+    ciclo = p.get("ciclo") or "mensal"
+    if plano not in PLANOS or forma not in ("cartao", "pix") or ciclo not in ("mensal", "anual"):
+        return jsonify({"erro": "Escolha o plano, o período e a forma de pagamento."}), 400
     telefone = pagamentos.so_digitos(p.get("telefone"))
     endereco = {k: (str(p.get(k) or "")).strip() for k in ("cep", "rua", "numero", "complemento", "bairro")}
     if forma == "cartao" or not u["asaas_cadastro_ok"]:
@@ -969,17 +1006,18 @@ def iniciar_assinatura():
             pagamentos.atualizar_cliente(cliente, telefone, endereco)  # cadastro antigo, incompleto
             with conectar() as con:
                 con.execute("UPDATE usuarios SET asaas_cadastro_ok='1' WHERE id=?", (u["id"],))
-        info = PLANOS[plano]
-        nome_plano = f"{APP_NOME} {info['nome']}"
+        preco = precos_atuais()[plano]
+        valor = preco["anual"] if ciclo == "anual" else preco["mensal"]
+        nome_plano = f"{APP_NOME} {PLANOS[plano]['nome']}" + (" (anual)" if ciclo == "anual" else "")
         if forma == "cartao":
-            r = pagamentos.checkout_cartao(_dados_pagador(u, cliente, p, telefone, endereco), nome_plano, info["valor"], _urls_retorno(), u["id"])
+            r = pagamentos.checkout_cartao(_dados_pagador(u, cliente, p, telefone, endereco), nome_plano, valor, _urls_retorno(), u["id"], ciclo)
         else:
-            r = pagamentos.assinatura_pix(cliente, nome_plano, info["valor"], u["id"])
+            r = pagamentos.assinatura_pix(cliente, nome_plano, valor, u["id"], ciclo)
     except pagamentos.ErroPagamento as e:
         return jsonify({"erro": str(e)}), 502
     with conectar() as con:
-        con.execute("UPDATE usuarios SET plano_pendente=?, asaas_checkout_pendente=?, asaas_assinatura_pendente=? WHERE id=?",
-                    (plano, r["id"] if forma == "cartao" else None, r["id"] if forma == "pix" else None, u["id"]))
+        con.execute("UPDATE usuarios SET plano_pendente=?, ciclo_pendente=?, fundador_pendente=?, asaas_checkout_pendente=?, asaas_assinatura_pendente=? WHERE id=?",
+                    (plano, ciclo, 1 if preco["fundador"] else 0, r["id"] if forma == "cartao" else None, r["id"] if forma == "pix" else None, u["id"]))
     registrar_auditoria_pagamento(u["id"], f"checkout_{forma}", plano)
     return jsonify({"url": r["url"]})
 
@@ -1077,7 +1115,21 @@ def _plano_do_pagamento(u: dict, valor: float) -> str:
         return u["plano_pendente"]
     if u.get("plano") in PLANOS:
         return u["plano"]
-    return "completo" if valor >= PLANOS["completo"]["valor"] - 0.01 else "essencial"
+    # deduz pelo valor mais próximo entre todos os preços conhecidos
+    candidatos = []
+    for k, v in PLANOS.items():
+        for mensal in (v["valor"], v["fundador"]):
+            candidatos += [(abs(valor - mensal), k), (abs(valor - mensal * MESES_ANUAL), k)]
+    return min(candidatos)[1]
+
+
+def _ciclo_do_pagamento(u: dict, valor: float) -> str:
+    if u.get("ciclo_pendente") in ("mensal", "anual"):
+        return u["ciclo_pendente"]
+    if u.get("ciclo") in ("mensal", "anual"):
+        return u["ciclo"]
+    menor_mensal = max(v["valor"] for v in PLANOS.values())
+    return "anual" if valor > menor_mensal * 3 else "mensal"
 
 
 def processar_evento_pagamento(evento: dict) -> str:
@@ -1107,7 +1159,8 @@ def processar_evento_pagamento(evento: dict) -> str:
         except ValueError:
             vencimento = datetime.now()
         base = max(datetime.now(), vencimento)
-        novo_fim = base + timedelta(days=31 + DIAS_TOLERANCIA)
+        ciclo = _ciclo_do_pagamento(u, valor)
+        novo_fim = base + timedelta(days=(366 if ciclo == "anual" else 31) + DIAS_TOLERANCIA)
         atual = _dt(u["acesso_ate"])
         if u["acesso_ate"] is None and u["papel"] != "dono" and u["status"] == "ativo" and not u["pagante"]:
             atual = None  # cortesia sem prazo vira mensal ao assinar
@@ -1118,9 +1171,10 @@ def processar_evento_pagamento(evento: dict) -> str:
         with conectar() as con:
             con.execute(
                 "UPDATE usuarios SET status=CASE WHEN status='convidado' THEN status ELSE 'ativo' END, acesso_ate=?, pagante=1, plano=?, "
-                "plano_pendente=NULL, asaas_checkout_pendente=NULL, asaas_assinatura_pendente=NULL, "
-                "assinatura_status='ativa', asaas_subscription_id=COALESCE(?, asaas_subscription_id) WHERE id=?",
-                (novo_fim.isoformat(timespec="seconds"), plano, assinatura_nova, u["id"]),
+                "plano_pendente=NULL, asaas_checkout_pendente=NULL, asaas_assinatura_pendente=NULL, ciclo=?, ciclo_pendente=NULL, "
+                "fundador=CASE WHEN fundador_pendente=1 OR fundador=1 THEN 1 ELSE 0 END, fundador_pendente=0, "
+                "valor_assinatura=?, assinatura_status='ativa', asaas_subscription_id=COALESCE(?, asaas_subscription_id) WHERE id=?",
+                (novo_fim.isoformat(timespec="seconds"), plano, ciclo, valor or u["valor_assinatura"], assinatura_nova, u["id"]),
             )
             definir_publicacao(u["id"], plano == "completo", con)
         if assinatura_nova and antiga and antiga != assinatura_nova:

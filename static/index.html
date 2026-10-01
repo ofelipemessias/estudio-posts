@@ -172,6 +172,14 @@
   .plano .preco{font-size:30px; font-weight:800; margin:6px 0 2px;}
   .plano .preco small{font-size:14px; font-weight:600; color:var(--mudo);}
   .plano ul{margin:12px 0 0; padding-left:18px; font-size:13.5px; line-height:1.7;}
+  .ciclos{display:inline-flex; background:var(--suave-2); border-radius:99px; padding:4px; gap:4px; margin:6px 0 2px;}
+  .ciclos button{border:none; background:transparent; border-radius:99px; padding:8px 16px; font-weight:700; color:var(--mudo);}
+  .ciclos button.ativo{background:var(--cartao); color:var(--tinta); box-shadow:0 1px 4px rgba(0,0,0,.12);}
+  .ciclos .economia{color:var(--acento); font-size:11.5px; margin-left:4px;}
+  .faixa-fundador{display:flex; gap:10px; align-items:center; flex-wrap:wrap; background:var(--acento-2); color:var(--acento); border-radius:10px;
+    padding:10px 14px; font-size:13.5px; font-weight:600; margin-top:12px;}
+  .plano .riscado{font-size:15px; color:var(--mudo); text-decoration:line-through; font-weight:600; margin-left:6px;}
+  .plano .equivale{font-size:12.5px; color:var(--mudo); margin-top:2px;}
   .plano .selo{position:absolute; top:-11px; right:16px; background:var(--acento); color:var(--acento-txt); font-size:11px; font-weight:800; padding:3px 10px; border-radius:99px;}
   .formas{display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:10px; margin-bottom:16px;}
   .forma{display:flex; gap:10px; align-items:flex-start; border:1px solid var(--borda); border-radius:12px; padding:14px; cursor:pointer; background:var(--campo); margin:0; font-weight:500;}
@@ -301,13 +309,18 @@
     <p class="sub" id="assinar-sub"></p>
     <div id="assinar-status"></div>
     <div id="assinar-escolha">
+      <div class="ciclos" role="tablist">
+        <button type="button" class="ativo" data-ciclo="mensal">Mensal</button>
+        <button type="button" data-ciclo="anual">Anual<span class="economia" id="economia-anual"></span></button>
+      </div>
+      <div id="faixa-fundador"></div>
       <div class="planos" id="lista-planos"></div>
       <label>Forma de pagamento</label>
       <div class="formas">
         <label class="forma"><input type="radio" name="forma" value="cartao" checked>
-          <span><b>💳 Cartão de crédito <span class="etiqueta">recomendado</span></b><span class="info" style="margin:0;">Renovação automática todo mês. Você não precisa se preocupar com vencimento.</span></span></label>
+          <span><b>💳 Cartão de crédito <span class="etiqueta">recomendado</span></b><span class="info" style="margin:0;" id="txt-cartao">Renovação automática todo mês. Você não precisa se preocupar com vencimento.</span></span></label>
         <label class="forma"><input type="radio" name="forma" value="pix">
-          <span><b>⚡ Pix</b><span class="info" style="margin:0;">Você recebe a cobrança todo mês e paga pelo app do banco.</span></span></label>
+          <span><b>⚡ Pix</b><span class="info" style="margin:0;" id="txt-pix">Você recebe a cobrança todo mês e paga pelo app do banco.</span></span></label>
       </div>
       <div class="grade-2">
         <div class="campo oculto" id="campo-documento"><label for="assinar-doc">CPF ou CNPJ do titular</label><input id="assinar-doc" inputmode="numeric" placeholder="Só números"></div>
@@ -994,7 +1007,12 @@
   const assinaturaAtiva = () => !!(eu && eu.assinatura && eu.assinatura.configurada);
   const brl = (v) => Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
   const ROT_ASS = { ativa: "Ativa", atrasada: "Pagamento atrasado", cancelada: "Cancelada (vale até o fim do período pago)", estornada: "Estornada" };
-  let planoEscolhido = "essencial", dadosAssinatura = null;
+  let planoEscolhido = "essencial", cicloEscolhido = "mensal", dadosAssinatura = null;
+  document.querySelectorAll(".ciclos button").forEach((b) => b.addEventListener("click", () => {
+    cicloEscolhido = b.dataset.ciclo;
+    document.querySelectorAll(".ciclos button").forEach((x) => x.classList.toggle("ativo", x === b));
+    renderPlanos();
+  }));
 
   async function abrirTelaAssinar(){
     ["com-perfil", "tela-perfis", "painel", "sem-perfil"].forEach((id) => $(id).classList.add("oculto"));
@@ -1023,7 +1041,9 @@
     $("assinar-status").innerHTML = temAssinatura || a.status === "cancelada" ? `<div class="cartao">
         <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:center;">
           <div><div class="info" style="margin:0;">Plano atual</div>
-            <div style="font-size:20px; font-weight:800;">${esc(plano ? plano.nome : "—")} ${plano ? `<span class="info" style="font-size:14px;">${brl(plano.valor)}/mês</span>` : ""}</div>
+            <div style="font-size:20px; font-weight:800;">${esc(plano ? plano.nome : "—")}${a.ciclo === "anual" ? " anual" : ""}
+              ${a.valor_assinatura ? `<span class="info" style="font-size:14px;">${brl(a.valor_assinatura)}/${a.ciclo === "anual" ? "ano" : "mês"}</span>` : ""}
+              ${a.fundador ? '<span class="etiqueta">🎁 Preço de fundador</span>' : ""}</div>
             <div class="info" style="margin:4px 0 0;">${esc(ROT_ASS[a.status] || a.status || "")}${ate ? ` · acesso até ${ate}` : ""}</div></div>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
             <button class="secundario" id="btn-trocar-plano">${a.status === "cancelada" ? "Assinar de novo" : "Trocar de plano"}</button>
@@ -1063,13 +1083,24 @@
   document.querySelectorAll('input[name="forma"]').forEach((r) => r.addEventListener("change", atualizarCamposCobranca));
 
   function renderPlanos(){
-    const a = dadosAssinatura;
-    $("lista-planos").innerHTML = a.planos.map((p) => `<button type="button" class="plano ${p.id === planoEscolhido ? "escolhido" : ""}" data-plano="${esc(p.id)}">
+    const a = dadosAssinatura, anual = cicloEscolhido === "anual";
+    $("txt-cartao").textContent = `Renovação automática todo ${anual ? "ano" : "mês"}. Você não precisa se preocupar com vencimento.`;
+    $("txt-pix").textContent = `Você recebe a cobrança todo ${anual ? "ano" : "mês"} e paga pelo app do banco.`;
+    const gratis = 12 - (a.meses_anual || 10);
+    $("economia-anual").textContent = gratis > 0 ? ` ${gratis} meses grátis` : "";
+    const fundador = a.planos.some((p) => p.fundador);
+    $("faixa-fundador").innerHTML = fundador ? `<div class="faixa-fundador">🎁 <span><b>Preço de fundador</b>: travado enquanto você mantiver a assinatura.
+      ${a.vagas_fundador ? `Restam <b>${a.vagas_fundador}</b> ${a.vagas_fundador === 1 ? "vaga" : "vagas"}.` : ""}</span></div>` : "";
+    $("lista-planos").innerHTML = a.planos.map((p) => {
+      const valor = anual ? p.anual : p.mensal, cheio = anual ? p.cheio_mensal * (a.meses_anual || 10) : p.cheio_mensal;
+      return `<button type="button" class="plano ${p.id === planoEscolhido ? "escolhido" : ""}" data-plano="${esc(p.id)}">
         ${p.id === "completo" ? '<span class="selo">Publica sozinho</span>' : ""}
         <div style="font-weight:800; font-size:17px;">${esc(p.nome)}</div>
-        <div class="preco">${brl(p.valor)} <small>/mês</small></div>
+        <div class="preco">${brl(valor)} <small>/${anual ? "ano" : "mês"}</small>${p.fundador ? `<span class="riscado">${brl(cheio)}</span>` : ""}</div>
+        <div class="equivale">${anual ? `equivale a ${brl(valor / 12)}/mês` : "&nbsp;"}</div>
         <ul>${p.itens.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>
-      </button>`).join("");
+      </button>`;
+    }).join("");
     $("lista-planos").querySelectorAll(".plano").forEach((b) => b.addEventListener("click", () => { planoEscolhido = b.dataset.plano; renderPlanos(); }));
   }
 
@@ -1078,7 +1109,7 @@
     const forma = document.querySelector('input[name="forma"]:checked').value;
     const b = $("btn-ir-pagamento"); b.disabled = true; b.textContent = "Abrindo o pagamento…";
     try {
-      const r = await api("/api/assinatura/iniciar", json("POST", { plano: planoEscolhido, forma, cpf_cnpj: $("assinar-doc").value, telefone: $("assinar-tel").value,
+      const r = await api("/api/assinatura/iniciar", json("POST", { plano: planoEscolhido, ciclo: cicloEscolhido, forma, cpf_cnpj: $("assinar-doc").value, telefone: $("assinar-tel").value,
         cep: $("assinar-cep").value, numero: $("assinar-numero").value, rua: $("assinar-rua").value,
         bairro: $("assinar-bairro").value, complemento: $("assinar-compl").value }));
       window.location.href = r.url;
@@ -1438,7 +1469,7 @@
       <td><b>${esc(u.nome)}</b><div class="info" style="margin:0;">${esc(u.email)}</div>
         ${u.perfis.length ? `<div class="info" style="margin:0;">Perfil: ${esc(u.perfis.join(", "))}</div>` : ""}
         ${u.observacao ? `<div class="info" style="margin:0;">📝 ${esc(u.observacao)}</div>` : ""}</td>
-      <td><span class="tag ${u.situacao}">${ROT_SIT[u.situacao] || u.situacao}</span>${u.pagante ? ' <span class="tag pagante">Pagante</span>' : ""}${u.publicacao_auto ? ' <span class="tag completo">Completo</span>' : ""}</td>
+      <td><span class="tag ${u.situacao}">${ROT_SIT[u.situacao] || u.situacao}</span>${u.pagante ? ' <span class="tag pagante">Pagante</span>' : ""}${u.publicacao_auto ? ' <span class="tag completo">Completo</span>' : ""}${u.ciclo === "anual" ? ' <span class="tag convidado">Anual</span>' : ""}${u.fundador ? ' <span class="tag pagante">Fundador</span>' : ""}${u.assinatura_status === "atrasada" ? ' <span class="tag expirado">Atrasada</span>' : ""}</td>
       <td>${u.situacao === "convidado" ? (u.dias_acesso ? `${u.dias_acesso} dias após ativar` : "Ilimitado") : (u.acesso_ate ? dataCurta(u.acesso_ate) : "Ilimitado")}</td>
       <td>${u.posts_mes}/${u.limite_posts_mes} · ${u.posts_total}</td>
       <td>${u.radar_mes}/${u.limite_radar_mes}</td>

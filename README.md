@@ -118,6 +118,7 @@ python tests/teste_perfis.py
 python tests/teste_area.py
 python tests/teste_publicacao.py
 python tests/teste_assinatura.py
+python tests/teste_precos.py
 ```
 
 ## Arquivos

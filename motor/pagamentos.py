@@ -121,7 +121,7 @@ def ver_cliente(customer_id: str) -> dict:
     return _requisicao("GET", f"/customers/{urllib.parse.quote(customer_id)}")
 
 
-def checkout_cartao(dados: dict, nome_plano: str, valor: float, urls: dict, referencia: str) -> dict:
+def checkout_cartao(dados: dict, nome_plano: str, valor: float, urls: dict, referencia: str, ciclo: str = "mensal") -> dict:
     """Checkout recorrente no cartão, com os dados completos do pagador em
     customerData (o checkout exige telefone, endereço e o código IBGE da
     cidade). Devolve {"id", "url"}."""
@@ -141,19 +141,21 @@ def checkout_cartao(dados: dict, nome_plano: str, valor: float, urls: dict, refe
         "minutesToExpire": 60,
         "externalReference": referencia[:200],
         "callback": {"successUrl": urls["sucesso"], "cancelUrl": urls["cancelado"], "expiredUrl": urls["expirado"]},
-        "items": [{"name": nome_plano[:60], "description": f"Assinatura mensal {nome_plano}"[:100], "quantity": 1, "value": round(valor, 2)}],
-        "subscription": {"cycle": "MONTHLY", "nextDueDate": agora},
+        "items": [{"name": nome_plano[:60], "description": f"Assinatura {'anual' if ciclo == 'anual' else 'mensal'} {nome_plano}"[:100],
+                   "quantity": 1, "value": round(valor, 2)}],
+        "subscription": {"cycle": "YEARLY" if ciclo == "anual" else "MONTHLY", "nextDueDate": agora},
         "customerData": cliente,
     })
     return {"id": r["id"], "url": base_checkout() + urllib.parse.quote(r["id"])}
 
 
-def assinatura_pix(customer_id: str, nome_plano: str, valor: float, referencia: str) -> dict:
-    """Assinatura mensal no Pix. Devolve {"id", "url"} (url = fatura do 1º mês)."""
+def assinatura_pix(customer_id: str, nome_plano: str, valor: float, referencia: str, ciclo: str = "mensal") -> dict:
+    """Assinatura no Pix (mensal ou anual). Devolve {"id", "url"} (url = 1ª fatura)."""
     hoje = datetime.now(FUSO_BR).strftime("%Y-%m-%d")
     r = _requisicao("POST", "/subscriptions", {
         "customer": customer_id, "billingType": "PIX", "value": round(valor, 2), "nextDueDate": hoje,
-        "cycle": "MONTHLY", "description": f"Assinatura mensal {nome_plano}"[:100], "externalReference": referencia,
+        "cycle": "YEARLY" if ciclo == "anual" else "MONTHLY",
+        "description": f"Assinatura {'anual' if ciclo == 'anual' else 'mensal'} {nome_plano}"[:100], "externalReference": referencia,
     })
     cobrancas = _requisicao("GET", f"/subscriptions/{urllib.parse.quote(r['id'])}/payments")
     lista = cobrancas.get("data") or []

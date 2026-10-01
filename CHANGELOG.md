@@ -2,6 +2,24 @@
 
 Registro da evolução do Estúdio de Posts. Datas no formato AAAA-MM-DD.
 
+## [0.12.0] - 2026-10-01
+### Adicionado
+- **Preço de fundador**: Essencial **R$ 97/mês** e Completo **R$ 147/mês**
+  (preço cheio R$ 147 e R$ 197 aparece riscado), enquanto houver vagas
+  (`FUNDADOR_VAGAS`, padrão 30). Quando as vagas acabam, o sistema passa
+  sozinho pro preço cheio. Faixa "Preço de fundador, travado enquanto você
+  mantiver a assinatura · Restam X vagas".
+- **Plano anual** (seletor Mensal / Anual "2 meses grátis"): anual =
+  `MESES_ANUAL` x mensal (padrão 10). Cartão e Pix com ciclo anual no Asaas;
+  libera ~12 meses de acesso.
+- O valor e o ciclo de cada assinatura ficam registrados (`valor_assinatura`,
+  `ciclo`, `fundador`) e aparecem em "Minha assinatura" e no painel
+  (etiquetas Anual, Fundador e Atrasada).
+- Teste `tests/teste_precos.py`.
+### Alterado
+- Variáveis de preço no `.env`: `PRECO_*` agora é o preço cheio e
+  `PRECO_FUNDADOR_*` o de fundador.
+
 ## [0.11.0] - 2026-10-01
 ### Adicionado
 - **Rede de segurança do pagamento**: se o aviso (webhook) do Asaas atrasar ou
