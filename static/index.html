@@ -313,6 +313,18 @@
         <div class="campo oculto" id="campo-documento"><label for="assinar-doc">CPF ou CNPJ (pra nota fiscal)</label><input id="assinar-doc" inputmode="numeric" placeholder="Só números"></div>
         <div class="campo oculto" id="campo-telefone"><label for="assinar-tel">Celular com DDD</label><input id="assinar-tel" inputmode="tel" placeholder="Ex.: 17991234567"></div>
       </div>
+      <div class="oculto" id="campos-endereco">
+        <div class="grade-2">
+          <div class="campo"><label for="assinar-cep">CEP</label><input id="assinar-cep" inputmode="numeric" placeholder="Ex.: 15015000">
+            <div class="info" id="cep-info"></div></div>
+          <div class="campo"><label for="assinar-numero">Número</label><input id="assinar-numero" placeholder="Ex.: 123 ou S/N"></div>
+        </div>
+        <div class="grade-2">
+          <div class="campo"><label for="assinar-rua">Rua</label><input id="assinar-rua"></div>
+          <div class="campo"><label for="assinar-bairro">Bairro</label><input id="assinar-bairro"></div>
+        </div>
+        <div class="campo"><label for="assinar-compl">Complemento (opcional)</label><input id="assinar-compl" placeholder="Sala, apto..."></div>
+      </div>
       <button class="primario" id="btn-ir-pagamento">Continuar para o pagamento</button>
       <div class="info" style="text-align:center;">Pagamento processado com segurança pelo Asaas. Os dados do cartão são digitados na página deles, não aqui.</div>
       <div class="erro" id="erro-assinar"></div>
@@ -992,7 +1004,8 @@
     const a = dadosAssinatura, vencido = a.situacao === "expirado";
     $("btn-fechar-assinar").classList.toggle("oculto", vencido);
     $("campo-documento").classList.toggle("oculto", a.tem_cadastro);
-    $("campo-telefone").classList.toggle("oculto", a.tem_telefone);
+    $("campo-telefone").classList.toggle("oculto", a.cadastro_completo);
+    $("campos-endereco").classList.toggle("oculto", a.cadastro_completo);
     const ate = a.acesso_ate ? new Date(a.acesso_ate).toLocaleDateString("pt-BR") : null;
     const temAssinatura = a.pagante && ["ativa", "atrasada"].includes(a.status);
     if (vencido){
@@ -1043,9 +1056,23 @@
     const forma = document.querySelector('input[name="forma"]:checked').value;
     const b = $("btn-ir-pagamento"); b.disabled = true; b.textContent = "Abrindo o pagamento…";
     try {
-      const r = await api("/api/assinatura/iniciar", json("POST", { plano: planoEscolhido, forma, cpf_cnpj: $("assinar-doc").value, telefone: $("assinar-tel").value }));
+      const r = await api("/api/assinatura/iniciar", json("POST", { plano: planoEscolhido, forma, cpf_cnpj: $("assinar-doc").value, telefone: $("assinar-tel").value,
+        cep: $("assinar-cep").value, numero: $("assinar-numero").value, rua: $("assinar-rua").value,
+        bairro: $("assinar-bairro").value, complemento: $("assinar-compl").value }));
       window.location.href = r.url;
     } catch (e) { mostrarErro("erro-assinar", e.message); b.disabled = false; b.textContent = "Continuar para o pagamento"; }
+  });
+  $("assinar-cep").addEventListener("input", async () => {
+    const cep = $("assinar-cep").value.replace(/\D/g, "");
+    if (cep.length !== 8){ $("cep-info").textContent = ""; return; }
+    $("cep-info").textContent = "Buscando endereço…";
+    try {
+      const r = await api(`/api/cep/${cep}`);
+      if (r.rua) $("assinar-rua").value = r.rua;
+      if (r.bairro) $("assinar-bairro").value = r.bairro;
+      $("cep-info").textContent = `${r.cidade}/${r.uf}` + (r.rua ? "" : " · CEP geral da cidade: preencha a rua e o bairro.");
+      $(r.rua ? "assinar-numero" : "assinar-rua").focus();
+    } catch (e) { $("cep-info").textContent = e.message; }
   });
   $("btn-fechar-assinar").addEventListener("click", () => { $("tela-assinar").classList.add("oculto"); carregarPerfis(perfil && perfil.id); });
   $("btn-minha-assinatura").addEventListener("click", abrirTelaAssinar);

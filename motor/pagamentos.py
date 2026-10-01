@@ -77,19 +77,43 @@ def so_digitos(texto: str) -> str:
     return "".join(c for c in (texto or "") if c.isdigit())
 
 
-def criar_cliente(nome: str, email: str, cpf_cnpj: str, referencia: str, telefone: str) -> str:
+def buscar_cep(cep: str) -> dict | None:
+    """Endereço pelo CEP (ViaCEP, público e gratuito). None se não existir."""
+    cep = so_digitos(cep)
+    if len(cep) != 8:
+        return None
+    try:
+        with urllib.request.urlopen(f"https://viacep.com.br/ws/{cep}/json/", timeout=15) as resp:
+            d = json.loads(resp.read().decode() or "{}")
+    except (urllib.error.URLError, ValueError):
+        raise ErroPagamento("Não consegui consultar o CEP agora. Tente de novo em instantes.") from None
+    if not d or d.get("erro"):
+        return None
+    return {"rua": d.get("logradouro") or "", "bairro": d.get("bairro") or "", "cidade": d.get("localidade") or "", "uf": d.get("uf") or ""}
+
+
+def _dados_cadastro(telefone: str, endereco: dict) -> dict:
+    """O checkout do cartão exige telefone e endereço no cadastro do cliente."""
     tel = so_digitos(telefone)
+    return {
+        "phone": tel, "mobilePhone": tel,
+        "postalCode": so_digitos(endereco.get("cep")), "address": (endereco.get("rua") or "")[:120],
+        "addressNumber": (endereco.get("numero") or "")[:20], "complement": (endereco.get("complemento") or "")[:100],
+        "province": (endereco.get("bairro") or "")[:80],
+    }
+
+
+def criar_cliente(nome: str, email: str, cpf_cnpj: str, referencia: str, telefone: str, endereco: dict) -> str:
     r = _requisicao("POST", "/customers", {
         "name": (nome or "Cliente")[:100], "email": email, "cpfCnpj": so_digitos(cpf_cnpj),
-        "phone": tel, "mobilePhone": tel,  # o checkout do cartão exige telefone
+        **_dados_cadastro(telefone, endereco),
         "externalReference": referencia, "notificationDisabled": False,
     })
     return r["id"]
 
 
-def atualizar_telefone(customer_id: str, telefone: str):
-    tel = so_digitos(telefone)
-    _requisicao("POST", f"/customers/{urllib.parse.quote(customer_id)}", {"phone": tel, "mobilePhone": tel})
+def atualizar_cliente(customer_id: str, telefone: str, endereco: dict):
+    _requisicao("POST", f"/customers/{urllib.parse.quote(customer_id)}", _dados_cadastro(telefone, endereco))
 
 
 def checkout_cartao(customer_id: str, nome_plano: str, valor: float, urls: dict) -> dict:

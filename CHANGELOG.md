@@ -2,6 +2,15 @@
 
 Registro da evolução do Estúdio de Posts. Datas no formato AAAA-MM-DD.
 
+## [0.10.2] - 2026-10-01
+### Corrigido
+- O checkout com cartão do Asaas também exige **endereço** no cadastro do
+  cliente ("O campo address deve existir para o customer informado"). A tela
+  de assinatura pede **CEP e número**; rua, bairro e cidade vêm sozinhos pelo
+  ViaCEP (editáveis, pra CEPs gerais de cidade). Cadastros antigos incompletos
+  são completados automaticamente no Asaas.
+- Nova rota `GET /api/cep/<cep>`.
+
 ## [0.10.1] - 2026-10-01
 ### Corrigido
 - O checkout com cartão do Asaas exige telefone no cadastro do cliente

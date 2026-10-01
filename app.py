@@ -207,7 +207,7 @@ def iniciar_banco():
         cols_u = [r[1] for r in con.execute("PRAGMA table_info(usuarios)").fetchall()]
         if "publicacao_auto" not in cols_u:
             con.execute("ALTER TABLE usuarios ADD COLUMN publicacao_auto INTEGER NOT NULL DEFAULT 0")
-        for coluna in ("asaas_customer_id", "asaas_subscription_id", "plano", "plano_pendente", "assinatura_status", "asaas_telefone_ok"):
+        for coluna in ("asaas_customer_id", "asaas_subscription_id", "plano", "plano_pendente", "assinatura_status", "asaas_telefone_ok", "asaas_cadastro_ok"):
             if coluna not in cols_u:
                 con.execute(f"ALTER TABLE usuarios ADD COLUMN {coluna} TEXT")
         con.execute("CREATE TABLE IF NOT EXISTS eventos_pagamento (id TEXT PRIMARY KEY, evento TEXT, recebido_em TEXT NOT NULL)")
@@ -912,7 +912,7 @@ def ver_assinatura():
         "planos": [{"id": k, **v} for k, v in PLANOS.items()],
         "plano": u["plano"], "status": u["assinatura_status"], "pagante": bool(u["pagante"]),
         "acesso_ate": u["acesso_ate"], "situacao": situacao_acesso(u), "tem_cadastro": bool(u["asaas_customer_id"]),
-        "tem_telefone": bool(u["asaas_telefone_ok"]),
+        "cadastro_completo": bool(u["asaas_cadastro_ok"]),
     })
 
 
@@ -930,21 +930,25 @@ def iniciar_assinatura():
     if plano not in PLANOS or forma not in ("cartao", "pix"):
         return jsonify({"erro": "Escolha o plano e a forma de pagamento."}), 400
     telefone = pagamentos.so_digitos(p.get("telefone"))
-    if not u["asaas_telefone_ok"] and len(telefone) not in (10, 11):
-        return jsonify({"erro": "Informe seu celular com DDD (só números)."}), 400
+    endereco = {k: (str(p.get(k) or "")).strip() for k in ("cep", "rua", "numero", "complemento", "bairro")}
+    if not u["asaas_cadastro_ok"]:
+        if len(telefone) not in (10, 11):
+            return jsonify({"erro": "Informe seu celular com DDD (só números)."}), 400
+        if len(pagamentos.so_digitos(endereco["cep"])) != 8 or not endereco["rua"] or not endereco["numero"] or not endereco["bairro"]:
+            return jsonify({"erro": "Preencha o endereço: CEP, rua, número e bairro."}), 400
     try:
         cliente = u["asaas_customer_id"]
         if not cliente:
             documento = pagamentos.so_digitos(p.get("cpf_cnpj"))
             if len(documento) not in (11, 14):
                 return jsonify({"erro": "Informe um CPF ou CNPJ válido (só números)."}), 400
-            cliente = pagamentos.criar_cliente(u["nome"], u["email"], documento, u["id"], telefone)
+            cliente = pagamentos.criar_cliente(u["nome"], u["email"], documento, u["id"], telefone, endereco)
             with conectar() as con:
-                con.execute("UPDATE usuarios SET asaas_customer_id=?, asaas_telefone_ok='1' WHERE id=?", (cliente, u["id"]))
-        elif not u["asaas_telefone_ok"]:
-            pagamentos.atualizar_telefone(cliente, telefone)  # cliente antigo, cadastrado sem telefone
+                con.execute("UPDATE usuarios SET asaas_customer_id=?, asaas_cadastro_ok='1' WHERE id=?", (cliente, u["id"]))
+        elif not u["asaas_cadastro_ok"]:
+            pagamentos.atualizar_cliente(cliente, telefone, endereco)  # cadastro antigo, incompleto
             with conectar() as con:
-                con.execute("UPDATE usuarios SET asaas_telefone_ok='1' WHERE id=?", (u["id"],))
+                con.execute("UPDATE usuarios SET asaas_cadastro_ok='1' WHERE id=?", (u["id"],))
         info = PLANOS[plano]
         nome_plano = f"{APP_NOME} {info['nome']}"
         if forma == "cartao":
@@ -957,6 +961,18 @@ def iniciar_assinatura():
         con.execute("UPDATE usuarios SET plano_pendente=? WHERE id=?", (plano, u["id"]))
     registrar_auditoria_pagamento(u["id"], f"checkout_{forma}", plano)
     return jsonify({"url": r["url"]})
+
+
+@app.get("/api/cep/<cep>")
+@login_conta
+def consultar_cep(cep):
+    try:
+        r = pagamentos.buscar_cep(cep)
+    except pagamentos.ErroPagamento as e:
+        return jsonify({"erro": str(e)}), 502
+    if not r:
+        return jsonify({"erro": "CEP não encontrado."}), 404
+    return jsonify(r)
 
 
 @app.post("/api/assinatura/cancelar")
