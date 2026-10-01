@@ -2,6 +2,18 @@
 
 Registro da evolução do Estúdio de Posts. Datas no formato AAAA-MM-DD.
 
+## [0.11.0] - 2026-10-01
+### Adicionado
+- **Rede de segurança do pagamento**: se o aviso (webhook) do Asaas atrasar ou
+  falhar, o sistema pergunta ao Asaas se o checkout (cartão) ou a assinatura
+  (Pix) iniciados pela pessoa já foram pagos, e libera o acesso.
+  - Automático na volta do pagamento (`POST /api/assinatura/verificar`,
+    junto com a espera de confirmação).
+  - Botão **"Já paguei, verificar"** na tela de assinatura enquanto houver
+    pagamento em andamento.
+- O mesmo pagamento nunca é aplicado duas vezes (webhook + verificação, ou
+  CONFIRMED + RECEIVED), pela tabela `pagamentos_processados`.
+
 ## [0.10.4] - 2026-10-01
 ### Corrigido
 - "O campo postalCode é inválido": com o cadastro marcado como completo, o

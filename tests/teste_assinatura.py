@@ -133,6 +133,30 @@ r = ana.post("/api/assinatura/iniciar", json={"plano": "essencial", "forma": "ca
 ok(r.status_code == 200 and CHAMADAS["atualizados"][-1][0] == "cus_checkout_ana" and CHAMADAS["atualizados"][-1][2]["numero"] == "100",
    "cadastro antigo incompleto: completa telefone e endereço no Asaas")
 
+# --- rede de segurança: o webhook não chega, o sistema pergunta ao Asaas ---
+tok3 = dono.post("/api/admin/usuarios", json={"nome": "Beto", "email": "beto@x.com", "dias_acesso": 7}).json["link_convite"].split("/convite/")[1]
+beto = A.app.test_client(); beto.post(f"/api/convite/{tok3}", json={"senha": "senha12345"})
+uid_b = A.buscar_usuario(email="beto@x.com")["id"]
+with banco() as c: c.execute("UPDATE usuarios SET acesso_ate=? WHERE id=?", ((datetime.now() - timedelta(days=1)).isoformat(timespec="seconds"), uid_b))
+PAGOS = {}
+PG.pagamentos_confirmados = lambda checkout_id=None, subscription_id=None: PAGOS.get(checkout_id or subscription_id, [])
+ok(beto.post("/api/assinatura/verificar").json == {"pendente": False}, "sem pagamento iniciado, nada a verificar")
+r = beto.post("/api/assinatura/iniciar", json={"plano": "completo", "forma": "cartao", "cpf_cnpj": "52998224725", "telefone": "17991234567", **END})
+ok(r.status_code == 200 and A.buscar_usuario(usuario_id=uid_b)["asaas_checkout_pendente"] == "ck1", "guarda o checkout iniciado")
+ok(beto.get("/api/assinatura").json["pagamento_pendente"], "tela sabe que há pagamento em andamento (botão 'Já paguei')")
+import app as _A; _A._ULTIMA_VERIFICACAO.clear()
+ok(beto.post("/api/assinatura/verificar").json["pendente"] and not A.buscar_usuario(usuario_id=uid_b)["pagante"], "ainda não pago: continua pendente")
+PAGOS["ck1"] = [{"id": "pay_beto", "customer": "cus_ck_beto", "subscription": "sub_beto", "value": 247.0, "dueDate": datetime.now().strftime("%Y-%m-%d")}]
+_A._ULTIMA_VERIFICACAO.clear()
+r = beto.post("/api/assinatura/verificar")
+ub = A.buscar_usuario(usuario_id=uid_b)
+ok(r.json["resultado"] == "pago:completo" and ub["pagante"] and ub["plano"] == "completo" and ub["asaas_customer_id"] == "cus_ck_beto",
+   "pagamento confirmado no Asaas libera o acesso mesmo sem webhook")
+ok(not ub["asaas_checkout_pendente"] and beto.get("/api/perfis").status_code == 200, "limpa a pendência e volta a usar o sistema")
+fim_b = ub["acesso_ate"]
+r = webhook({"id": "evt_atrasado", "event": "PAYMENT_CONFIRMED", "payment": PAGOS["ck1"][0]})
+ok(r.json["resultado"] == "ja_processado" and A.buscar_usuario(usuario_id=uid_b)["acesso_ate"] == fim_b, "webhook atrasado do mesmo pagamento não dá mês extra")
+
 # --- outros ---
 ok(webhook({"id": "evt6", "event": "PAYMENT_CONFIRMED", "payment": {"customer": "cus_outra", "value": 10}}).json["resultado"] == "cliente_desconhecido",
    "pagamento de cliente desconhecido é ignorado")

@@ -162,6 +162,19 @@ def assinatura_pix(customer_id: str, nome_plano: str, valor: float, referencia: 
     return {"id": r["id"], "url": lista[0].get("invoiceUrl")}
 
 
+def pagamentos_confirmados(checkout_id: str | None = None, subscription_id: str | None = None) -> list:
+    """Cobranças já pagas de um checkout ou de uma assinatura (rede de
+    segurança caso o webhook atrase ou falhe)."""
+    if not checkout_id and not subscription_id:
+        return []
+    filtro = {"checkoutSession": checkout_id} if checkout_id else {"subscription": subscription_id}
+    pagos = []
+    for status in ("CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"):
+        q = urllib.parse.urlencode({**filtro, "status": status, "limit": 20})
+        pagos += _requisicao("GET", f"/payments?{q}").get("data") or []
+    return pagos
+
+
 def cancelar_assinatura(subscription_id: str):
     try:
         _requisicao("DELETE", f"/subscriptions/{urllib.parse.quote(subscription_id)}")

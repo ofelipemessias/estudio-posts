@@ -207,10 +207,12 @@ def iniciar_banco():
         cols_u = [r[1] for r in con.execute("PRAGMA table_info(usuarios)").fetchall()]
         if "publicacao_auto" not in cols_u:
             con.execute("ALTER TABLE usuarios ADD COLUMN publicacao_auto INTEGER NOT NULL DEFAULT 0")
-        for coluna in ("asaas_customer_id", "asaas_subscription_id", "plano", "plano_pendente", "assinatura_status", "asaas_telefone_ok", "asaas_cadastro_ok"):
+        for coluna in ("asaas_customer_id", "asaas_subscription_id", "plano", "plano_pendente", "assinatura_status", "asaas_telefone_ok", "asaas_cadastro_ok",
+                       "asaas_checkout_pendente", "asaas_assinatura_pendente"):
             if coluna not in cols_u:
                 con.execute(f"ALTER TABLE usuarios ADD COLUMN {coluna} TEXT")
         con.execute("CREATE TABLE IF NOT EXISTS eventos_pagamento (id TEXT PRIMARY KEY, evento TEXT, recebido_em TEXT NOT NULL)")
+        con.execute("CREATE TABLE IF NOT EXISTS pagamentos_processados (id TEXT PRIMARY KEY, usuario_id TEXT, processado_em TEXT NOT NULL)")
         con.execute("""
             CREATE TABLE IF NOT EXISTS agendamentos (
                 id TEXT PRIMARY KEY,
@@ -914,6 +916,7 @@ def ver_assinatura():
         "acesso_ate": u["acesso_ate"], "situacao": situacao_acesso(u), "tem_cadastro": bool(u["asaas_customer_id"]),
         "cadastro_completo": bool(u["asaas_cadastro_ok"]),
         "dados_cobranca": _dados_cobranca_salvos(u),
+        "pagamento_pendente": bool(u["asaas_checkout_pendente"] or u["asaas_assinatura_pendente"]),
     })
 
 
@@ -975,7 +978,8 @@ def iniciar_assinatura():
     except pagamentos.ErroPagamento as e:
         return jsonify({"erro": str(e)}), 502
     with conectar() as con:
-        con.execute("UPDATE usuarios SET plano_pendente=? WHERE id=?", (plano, u["id"]))
+        con.execute("UPDATE usuarios SET plano_pendente=?, asaas_checkout_pendente=?, asaas_assinatura_pendente=? WHERE id=?",
+                    (plano, r["id"] if forma == "cartao" else None, r["id"] if forma == "pix" else None, u["id"]))
     registrar_auditoria_pagamento(u["id"], f"checkout_{forma}", plano)
     return jsonify({"url": r["url"]})
 
@@ -990,6 +994,35 @@ def consultar_cep(cep):
     if not r:
         return jsonify({"erro": "CEP não encontrado."}), 404
     return jsonify(r)
+
+
+_ULTIMA_VERIFICACAO: dict = {}
+
+
+@app.post("/api/assinatura/verificar")
+@login_conta
+def verificar_pagamento():
+    """Rede de segurança: pergunta ao Asaas se o checkout/assinatura que a
+    pessoa iniciou já foi pago, sem depender só do webhook."""
+    u = g.usuario
+    if not pagamentos.configurado() or not (u["asaas_checkout_pendente"] or u["asaas_assinatura_pendente"]):
+        return jsonify({"pendente": False})
+    if time.time() - _ULTIMA_VERIFICACAO.get(u["id"], 0) < 4:
+        return jsonify({"pendente": True, "aguarde": True})
+    _ULTIMA_VERIFICACAO[u["id"]] = time.time()
+    try:
+        pagos = pagamentos.pagamentos_confirmados(u["asaas_checkout_pendente"], u["asaas_assinatura_pendente"])
+    except pagamentos.ErroPagamento as e:
+        return jsonify({"pendente": True, "erro": str(e)})
+    resultado = None
+    for pag in pagos:
+        if pag.get("customer"):
+            # O checkout/assinatura é desta pessoa (foi o sistema que abriu),
+            # então o cliente do pagamento é dela.
+            with conectar() as con:
+                con.execute("UPDATE usuarios SET asaas_customer_id=?, asaas_cadastro_ok='1' WHERE id=?", (pag["customer"], u["id"]))
+        resultado = processar_evento_pagamento({"event": "PAYMENT_CONFIRMED", "payment": pag})
+    return jsonify({"pendente": not pagos, "resultado": resultado})
 
 
 @app.post("/api/assinatura/cancelar")
@@ -1062,6 +1095,11 @@ def processar_evento_pagamento(evento: dict) -> str:
         return "cliente_desconhecido"
 
     if tipo in ("PAYMENT_CONFIRMED", "PAYMENT_RECEIVED"):
+        if pag.get("id"):
+            with conectar() as con:
+                if con.execute("SELECT 1 FROM pagamentos_processados WHERE id=?", (pag["id"],)).fetchone():
+                    return "ja_processado"
+                con.execute("INSERT INTO pagamentos_processados (id, usuario_id, processado_em) VALUES (?,?,?)", (pag["id"], u["id"], agora()))
         valor = float(pag.get("value") or 0)
         plano = _plano_do_pagamento(u, valor)
         try:
@@ -1080,7 +1118,8 @@ def processar_evento_pagamento(evento: dict) -> str:
         with conectar() as con:
             con.execute(
                 "UPDATE usuarios SET status=CASE WHEN status='convidado' THEN status ELSE 'ativo' END, acesso_ate=?, pagante=1, plano=?, "
-                "plano_pendente=NULL, assinatura_status='ativa', asaas_subscription_id=COALESCE(?, asaas_subscription_id) WHERE id=?",
+                "plano_pendente=NULL, asaas_checkout_pendente=NULL, asaas_assinatura_pendente=NULL, "
+                "assinatura_status='ativa', asaas_subscription_id=COALESCE(?, asaas_subscription_id) WHERE id=?",
                 (novo_fim.isoformat(timespec="seconds"), plano, assinatura_nova, u["id"]),
             )
             definir_publicacao(u["id"], plano == "completo", con)

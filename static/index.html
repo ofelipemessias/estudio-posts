@@ -1031,6 +1031,17 @@
           </div>
         </div></div>` : "";
     $("assinar-escolha").classList.toggle("oculto", temAssinatura || a.status === "cancelada");
+    if (a.pagamento_pendente && !temAssinatura){
+      $("assinar-status").insertAdjacentHTML("beforeend", `<div class="faixa-teste"><span>Já pagou? Se o acesso ainda não foi liberado, clique pra conferir.</span>
+        <button class="primario" style="width:auto; padding:7px 12px;" id="btn-ja-paguei">Já paguei, verificar</button></div>`);
+      $("btn-ja-paguei").onclick = async () => {
+        const b = $("btn-ja-paguei"); b.disabled = true; b.textContent = "Conferindo…";
+        try { await api("/api/assinatura/verificar", { method: "POST" }); eu = await api("/api/eu"); } catch (e) { /* mostra abaixo */ }
+        if (eu.situacao === "ativo" && eu.assinatura && eu.assinatura.pagante){ await abrirApp(); return; }
+        b.disabled = false; b.textContent = "Já paguei, verificar";
+        mostrarErro("erro-assinar", "Ainda não encontramos o pagamento confirmado. No Pix pode levar alguns minutos; tente de novo daqui a pouco.");
+      };
+    }
     if ($("btn-trocar-plano")) $("btn-trocar-plano").onclick = () => { $("assinar-escolha").classList.remove("oculto"); $("btn-trocar-plano").classList.add("oculto"); };
     if ($("btn-cancelar-assinatura")) $("btn-cancelar-assinatura").onclick = async () => {
       if (!confirm("Cancelar sua assinatura? Você continua com acesso até o fim do período já pago.")) return;
@@ -1114,6 +1125,7 @@
     if (naAssinatura) $("assinar-escolha").classList.add("oculto");
     while (Date.now() < fim){
       await new Promise((r) => setTimeout(r, 5000));
+      try { await api("/api/assinatura/verificar", { method: "POST" }); } catch (e) { /* segue tentando */ }
       try { eu = await api("/api/eu"); } catch (e) { continue; }
       if (eu.situacao === "ativo" && eu.assinatura && eu.assinatura.pagante){
         aviso.innerHTML = naAssinatura ? '<div class="faixa-teste"><span>🎉 Pagamento confirmado! Sua assinatura está ativa.</span></div>' : "<span>🎉 Pagamento confirmado! Sua assinatura está ativa.</span>";
