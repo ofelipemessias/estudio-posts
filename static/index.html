@@ -180,6 +180,9 @@
     padding:10px 14px; font-size:13.5px; font-weight:600; margin-top:12px;}
   .faixa-fundador .barra-vagas{flex-basis:100%; height:6px; background:rgba(0,0,0,.08); border-radius:99px; overflow:hidden;}
   .faixa-fundador .barra-vagas span{display:block; height:100%; background:var(--acento);}
+  .opcao-oab{display:flex; gap:10px; align-items:flex-start; border:1px solid var(--borda); border-radius:12px; padding:12px 14px; background:var(--campo); margin:0 0 6px; font-weight:600; cursor:pointer;}
+  .opcao-oab input{width:auto; margin-top:3px;}
+  .aviso-oab{background:var(--alerta-bg); color:var(--alerta); border-radius:10px; padding:10px 12px; font-size:13px; line-height:1.45; margin-bottom:14px;}
   .plano .riscado{font-size:15px; color:var(--mudo); text-decoration:line-through; font-weight:600; margin-left:6px;}
   .plano .equivale{font-size:12.5px; color:var(--mudo); margin-top:2px;}
   .plano .selo{position:absolute; top:-11px; right:16px; background:var(--acento); color:var(--acento-txt); font-size:11px; font-weight:800; padding:3px 10px; border-radius:99px;}
@@ -408,9 +411,12 @@
             <option value="Compartilhe com quem precisa saber disso.">Compartilhar com quem precisa</option>
             <option value="Siga o perfil pra mais orientações sobre seus direitos.">Seguir o perfil</option>
             <option value="Deixe sua dúvida nos comentários.">Dúvida nos comentários</option>
+            <option value="Me chama no direct que eu te ajudo." data-livre>Chamar no direct</option>
+            <option value="Clique no link da bio e conheça." data-livre>Link na bio</option>
+            <option value="Fale comigo pelo WhatsApp (link na bio)." data-livre>Chamar no WhatsApp</option>
             <option value="">Deixar a IA escolher</option>
           </select>
-          <div class="info">Só opções permitidas pelo Provimento 205/2021 da OAB.</div>
+          <div class="info" id="info-cta">Só opções permitidas pelo Provimento 205/2021 da OAB.</div>
         </div>
         <button class="primario" id="btn-gerar">Gerar post</button>
         <div class="erro" id="erro-criar"></div>
@@ -513,6 +519,12 @@
           <div class="campo"><label for="p-area">Área de atuação</label><input id="p-area" placeholder="Ex.: Direito Previdenciário"></div>
           <div class="campo"><label for="p-voz">Voz dos posts</label><select id="p-voz"></select>
             <div class="info">Vale pros slides, a legenda e o roteiro.</div></div>
+        </div>
+        <div class="campo">
+          <label class="opcao-oab"><input type="checkbox" id="p-oab" checked>
+            <span>Seguir as regras de publicidade da OAB (Provimento 205/2021)
+              <span class="info" style="display:block; font-weight:400; margin:2px 0 0;">Ligado: a IA evita promessa de resultado, preço, "contrate-nos" e usa só chamadas finais permitidas pela OAB.</span></span></label>
+          <div class="aviso-oab oculto" id="aviso-oab">⚠️ <b>Regras da OAB desligadas.</b> A IA não vai aplicar as restrições de publicidade da advocacia e libera chamadas como "me chama no direct". Se este perfil for de advogado, a responsabilidade pelo que for publicado, inclusive perante a OAB, é de quem publica. Continuam valendo sempre: não inventar dados e não fazer promessas falsas.</div>
         </div>
         <div class="campo"><label for="p-sobre">Sobre o advogado ou escritório (opcional)</label><textarea id="p-sobre" rows="3" placeholder="Cidade, tempo de atuação, especialidade, jeito de atender..."></textarea></div>
         <label>Temas da área</label>
@@ -816,6 +828,14 @@
   $("btn-perfil-atual").addEventListener("click", () => carregarPerfis(perfil && perfil.id, { forcar: true }));
   $("btn-ver-perfis").addEventListener("click", () => carregarPerfis(perfil && perfil.id, { forcar: true }));
 
+  function atualizarCtas(){
+    const oab = !perfil || perfil.regras_oab !== false;
+    document.querySelectorAll("#cta option[data-livre]").forEach((o) => { o.hidden = oab; o.disabled = oab; });
+    if (oab && $("cta").selectedOptions[0] && $("cta").selectedOptions[0].hasAttribute("data-livre")) $("cta").selectedIndex = 0;
+    $("info-cta").textContent = oab ? "Só opções permitidas pelo Provimento 205/2021 da OAB." : "Regras da OAB desligadas neste perfil: chamadas finais livres.";
+  }
+  $("p-oab").addEventListener("change", () => $("aviso-oab").classList.toggle("oculto", $("p-oab").checked));
+
   function usarPerfil(p){
     perfil = p;
     $("tela-perfis").classList.add("oculto");
@@ -823,6 +843,7 @@
     $("tela-assinar").classList.add("oculto");
     $("com-perfil").classList.remove("oculto");
     atualizarTopoPerfil();
+    atualizarCtas();
     try { localStorage.setItem("perfil_atual", p.id); } catch (e) {}
     $("titulo-perfil").textContent = p.nome_exibicao;
     $("sub-perfil").textContent = [p.handle, p.area].filter(Boolean).join(" · ") || "Complete o perfil na aba \"Perfil\".";
@@ -1428,6 +1449,7 @@
     $("p-nome").value = p.nome_exibicao; $("p-handle").value = p.handle; $("p-estilo").value = p.estilo_visual;
     $("p-cor-fundo").value = p.cores.fundo || ""; $("p-cor-texto").value = p.cores.texto || ""; $("p-cor-destaque").value = p.cores.destaque || "";
     $("p-avatar-status").textContent = p.tem_avatar ? "Foto cadastrada. Envie outra pra trocar." : "Sem foto: as artes usam a inicial do nome.";
+    $("p-oab").checked = p.regras_oab !== false; $("aviso-oab").classList.toggle("oculto", $("p-oab").checked);
     $("p-area").value = p.area; $("p-voz").value = p.voz || "neutra"; $("p-sobre").value = p.sobre; $("p-publico").value = p.publico; $("p-dna").value = p.dna;
     $("p-frentes").innerHTML = ""; p.frentes.forEach((f) => $("p-frentes").appendChild(linhaFrente(f)));
     renderCartaoInstagram();
@@ -1447,7 +1469,7 @@
     try {
       await api(`/api/perfis/${perfil.id}`, json("PUT", {
         nome_exibicao: $("p-nome").value, handle: $("p-handle").value, estilo_visual: $("p-estilo").value, cores: coresForm(),
-        area: $("p-area").value, voz: $("p-voz").value, sobre: $("p-sobre").value, frentes, publico: $("p-publico").value, dna: $("p-dna").value,
+        area: $("p-area").value, voz: $("p-voz").value, regras_oab: $("p-oab").checked, sobre: $("p-sobre").value, frentes, publico: $("p-publico").value, dna: $("p-dna").value,
       }));
       await carregarPerfis(perfil.id);
       $("ok-perfil").textContent = "Perfil salvo. Os próximos posts já usam essas informações."; $("ok-perfil").classList.add("mostrar");

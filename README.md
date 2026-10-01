@@ -119,6 +119,8 @@ python tests/teste_area.py
 python tests/teste_publicacao.py
 python tests/teste_assinatura.py
 python tests/teste_precos.py
+python tests/teste_limpeza_slides.py
+python tests/teste_regras_oab.py
 ```
 
 ## Arquivos

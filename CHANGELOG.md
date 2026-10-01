@@ -2,13 +2,38 @@
 
 Registro da evolução do Estúdio de Posts. Datas no formato AAAA-MM-DD.
 
+## [0.13.0] - 2026-10-01
+### Adicionado
+- Opção por perfil **"Seguir as regras de publicidade da OAB (Provimento
+  205/2021)"**, ligada por padrão (comportamento de antes). Desligada:
+  - a IA usa "regras de comunicação" gerais nos posts e no radar de pautas
+    (linguagem livre, convite pra direct/WhatsApp/link na bio), com redator
+    genérico ("profissional ou marca") e alertas sem menção à OAB;
+  - continuam valendo sempre: não inventar dados/fontes/leis/decisões, não
+    fazer promessas que não podem ser garantidas, não expor pessoas;
+  - novas chamadas finais: "Chamar no direct", "Link na bio", "Chamar no
+    WhatsApp";
+  - aviso de que, em perfil de advogado, a responsabilidade pelo que for
+    publicado (inclusive perante a OAB) é de quem publica.
+- Teste `tests/teste_regras_oab.py`.
+
+## [0.12.2] - 2026-10-01
+### Corrigido
+- Slides gerados podiam vir com "Slide 3" escrito dentro da arte e com quebras
+  de linha no meio da frase (a arte ficava com "degraus"). A IA recebeu a
+  instrução de não numerar nem quebrar frases, e a limpeza automática agora
+  remove "Slide N", "**Slide N:**", "2/7" e junta as linhas de cada parágrafo,
+  mantendo listas feitas de propósito ("- item", "1. item") e os destaques.
+  Edições manuais não são alteradas.
+- Teste `tests/teste_limpeza_slides.py`.
+
 ## [0.12.1] - 2026-10-01
 ### Alterado
 - Urgência real no preço de fundador: **prazo** (`FUNDADOR_ATE`, ex.:
-  2026-10-31) além do limite de vagas (padrão agora 15). Depois do prazo ou das
+  2026-10-31) além do limite de vagas (padrão agora 10, a "turma de fundadores"). Depois do prazo ou das
   vagas, o sistema passa sozinho pro preço cheio.
 - A faixa mostra o prazo ("só até 31/10", "faltam 4 dias", "só até amanhã",
-  "só até hoje") e, quando já há inscritos, "9 de 15 já preenchidas" com uma
+  "só até hoje") e, quando já há inscritos, "6 de 10 já preenchidas" com uma
   barra de progresso ("restam 2!" no fim). Sem inscritos, mostra só o total.
 
 ## [0.12.0] - 2026-10-01

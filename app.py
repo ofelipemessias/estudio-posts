@@ -69,7 +69,7 @@ PLANOS = {
     "completo": {"nome": "Completo", "valor": _preco("PRECO_COMPLETO", "197"), "fundador": _preco("PRECO_FUNDADOR_COMPLETO", "147"),
                  "itens": ["Tudo do Essencial", "Publicar direto no Instagram", "Agendar posts com data e hora", "Agenda de publicações"]},
 }
-FUNDADOR_VAGAS = int(os.environ.get("FUNDADOR_VAGAS", "15"))
+FUNDADOR_VAGAS = int(os.environ.get("FUNDADOR_VAGAS", "10"))
 # Último dia do preço de fundador (AAAA-MM-DD). Em branco = sem prazo, só vagas.
 FUNDADOR_ATE = (os.environ.get("FUNDADOR_ATE") or "").strip()
 
@@ -240,6 +240,8 @@ def iniciar_banco():
             con.execute("ALTER TABLE perfis ADD COLUMN usuario_id TEXT")
         if "voz" not in colunas:
             con.execute("ALTER TABLE perfis ADD COLUMN voz TEXT NOT NULL DEFAULT 'neutra'")
+        if "regras_oab" not in colunas:
+            con.execute("ALTER TABLE perfis ADD COLUMN regras_oab INTEGER NOT NULL DEFAULT 1")
         for coluna in ("zernio_profile_id", "ig_account_id", "ig_username"):
             if coluna not in colunas:
                 con.execute(f"ALTER TABLE perfis ADD COLUMN {coluna} TEXT")
@@ -315,6 +317,7 @@ def _perfil_dict(r) -> dict:
         "tem_avatar": bool(r["avatar"]), "avatar": r["avatar"], "criado_em": r["criado_em"],
         "usuario_id": r["usuario_id"], "voz": r["voz"] or "neutra",
         "ig_username": r["ig_username"], "ig_conectado": bool(r["ig_account_id"]),
+        "regras_oab": bool(r["regras_oab"]) if r["regras_oab"] is not None else True,
         "zernio_profile_id": r["zernio_profile_id"], "ig_account_id": r["ig_account_id"],
     }
 
@@ -1402,11 +1405,12 @@ def salvar_perfil(perfil_id):
     estilo = p.get("estilo_visual") if p.get("estilo_visual") in render_post.ESTILOS else "claro"
     with conectar() as con:
         con.execute(
-            "UPDATE perfis SET nome_exibicao=?, handle=?, area=?, sobre=?, frentes=?, publico=?, dna=?, estilo_visual=?, cores=?, voz=? WHERE id=?",
+            "UPDATE perfis SET nome_exibicao=?, handle=?, area=?, sobre=?, frentes=?, publico=?, dna=?, estilo_visual=?, cores=?, voz=?, regras_oab=? WHERE id=?",
             (nome[:120], (p.get("handle") or "").strip()[:80], (p.get("area") or "").strip()[:200],
              (p.get("sobre") or "").strip()[:2000], json.dumps(_limpar_frentes(p.get("frentes")), ensure_ascii=False),
              (p.get("publico") or "").strip()[:12000], (p.get("dna") or "").strip()[:20000], estilo,
-             json.dumps(_limpar_cores(p.get("cores"))), p.get("voz") if p.get("voz") in gerar_post.VOZES else "neutra", perfil_id),
+             json.dumps(_limpar_cores(p.get("cores"))), p.get("voz") if p.get("voz") in gerar_post.VOZES else "neutra",
+             0 if p.get("regras_oab") is False else 1, perfil_id),
         )
     return jsonify({"ok": True})
 

@@ -244,11 +244,29 @@ REGRAS_OAB = """REGRAS DE PUBLICIDADE DA ADVOCACIA (Provimento 205/2021 do CFOAB
 - Não use travessão (— ou –) em nenhum texto: nem nos slides, nem na legenda, nem no roteiro.
 - Nada de política partidária."""
 
+REGRAS_GERAIS = """REGRAS DE COMUNICAÇÃO (este perfil optou por NÃO seguir as regras de publicidade da OAB)
+- Linguagem livre e persuasiva; pode convidar pra conhecer o serviço, chamar no direct, no WhatsApp ou
+  no link da bio.
+- Mesmo assim, SEMPRE: não invente dados, números, fontes, leis ou decisões (na dúvida, deixe genérico
+  e aponte nos alertas); não faça promessa que não pode ser garantida (resultado certo, prazo
+  garantido); não exponha pessoas identificáveis; nada de informação enganosa.
+- Não use travessão (— ou –) em nenhum texto: nem nos slides, nem na legenda, nem no roteiro.
+- Nada de política partidária."""
+
+
+def segue_oab(perfil: dict | None) -> bool:
+    """Regras de publicidade da OAB: ligadas por padrão; cada perfil pode desligar."""
+    v = (perfil or {}).get("regras_oab")
+    return True if v is None else bool(v)
+
+
 REGRAS_FORMATO = {
     "carrossel": """FORMATO: CARROSSEL de {n_slides} slides, estrutura AIDA
 - Slide 1 = gancho que para o scroll (contradiz uma crença, provoca, ou fala da dor na cara).
 - Slides do meio = problema e depois o conteúdo de valor (o que fazer, direitos, erros comuns).
-- Último slide = fechamento com CTA permitido pelas regras da OAB.
+- Último slide = fechamento com {cta_regra}.
+- NÃO escreva "Slide 1", "1/7" ou qualquer numeração do slide no texto. NÃO quebre linha no meio
+  de uma frase: cada parágrafo é uma linha só; use linha em branco entre parágrafos.
 - Cada slide: no máximo ~45 palavras, frases curtas (até 12 palavras), parágrafos separados por
   linha em branco. Sem emoji, sem hashtag, sem travessão (— ou –), sem numeração "1/10".
 - Pode destacar 1 a 3 palavras-chave por slide com **asterisco duplo**.""",
@@ -260,7 +278,7 @@ REGRAS_FORMATO = {
     "reels": """FORMATO: ROTEIRO DE REELS (30 a 60 segundos, falado pelo advogado olhando pra câmera)
 - Gancho nos 3 primeiros segundos.
 - Cenas curtas com o que é falado e o texto que aparece na tela.
-- Fechamento com CTA permitido pela OAB.
+- Fechamento com {cta_regra}.
 - Em "slides", devolva UM item só: a frase da CAPA do Reels (até 15 palavras, pode usar
   **destaque**).""",
 }
@@ -347,10 +365,29 @@ def _limpar_roteiro(roteiro):
     return limpo
 
 
+_ITEM_DE_LISTA = re.compile(r"^\s*([-•▪►✅✔☑❌⚠➡👉]|\d+[.)]\s)")
+
+
 def _limpar_slide(texto: str) -> str:
-    texto = re.sub(r"\s*[—–]\s*", ", ", texto or "")
+    """Limpa o texto de um slide gerado pela IA (não mexe em edições manuais):
+    tira travessões, numeração ("1/7", "Slide 3:") e quebras de linha no meio
+    de frase, que deixavam a arte com "degraus"."""
+    texto = re.sub(r"\s*[—–]\s*", ", ", (texto or "").replace("\r", ""))
     texto = re.sub(r"^\s*\d+\s*/\s*\d+\s*", "", texto)
-    return texto.strip()
+    # "Slide 3", "Slide 3:", "**Slide 3**" ou "**Slide 3:**" no começo (sem comer o ** de um destaque logo depois)
+    texto = re.sub(r"^\s*(?:\*\*\s*(?:slide|card|tela|página)\s*\d+\s*[:.)\-]?\s*\*\*|(?:slide|card|tela|página)\s*\d+)\s*[:.)\-]?[ \t]*\n*",
+                   "", texto, flags=re.IGNORECASE)
+    paragrafos = []
+    for par in re.split(r"\n\s*\n", texto):
+        linhas = [l.strip() for l in par.split("\n") if l.strip()]
+        if not linhas:
+            continue
+        junto = linhas[0]
+        for linha in linhas[1:]:
+            # mantém a quebra só quando a próxima linha é item de lista
+            junto += ("\n" if _ITEM_DE_LISTA.match(linha) else " ") + linha
+        paragrafos.append(junto)
+    return "\n\n".join(paragrafos).strip()
 
 
 def _bloco_perfil(perfil: dict) -> str:
@@ -388,17 +425,23 @@ def gerar_post(opcoes: dict, perfil: dict) -> dict:
     formato = opcoes["formato"]
     n_slides = max(4, min(12, int(opcoes.get("n_slides") or 7)))
 
+    oab = segue_oab(perfil)
+    saida = SAIDA_JSON_POST if oab else SAIDA_JSON_POST.replace(
+        "pontos que um advogado precisa conferir antes de publicar (afirmações jurídicas, regra da OAB, dado da notícia)",
+        "pontos que precisam ser conferidos antes de publicar (afirmações, dados, números, nomes de menus ou funções, dado da notícia)")
     system = "\n\n".join(p for p in [
-        "Você é o redator de redes sociais de um advogado. Escreve em português do Brasil, linguagem "
-        "simples, sem juridiquês, pra quem não é da área.",
+        ("Você é o redator de redes sociais de um advogado. Escreve em português do Brasil, linguagem "
+         "simples, sem juridiquês, pra quem não é da área.") if oab else
+        ("Você é o redator de redes sociais de um profissional ou de uma marca. Escreve em português do "
+         "Brasil, linguagem simples e direta, pra quem não é especialista no assunto."),
         _bloco_perfil(perfil),
         (perfil.get("publico") or "").strip(),
         _bloco_dna(perfil),
-        REGRAS_OAB,
+        REGRAS_OAB if oab else REGRAS_GERAIS,
         INSTRUCOES_VOZ.get(perfil.get("voz") or "neutra", INSTRUCOES_VOZ["neutra"]),
         "TOM\n" + ESTILOS_ESCRITA.get(opcoes.get("estilo_escrita"), ESTILOS_ESCRITA["educativo"]),
-        REGRAS_FORMATO[formato].format(n_slides=n_slides),
-        SAIDA_JSON_POST,
+        REGRAS_FORMATO[formato].format(n_slides=n_slides, cta_regra="CTA permitido pelas regras da OAB" if oab else "CTA claro e direto"),
+        saida,
     ] if p)
 
     pedido = [f"TEMA DA ÁREA (frente): {_descricao_frente(perfil, opcoes.get('frente'))}"]
@@ -422,7 +465,7 @@ def gerar_post(opcoes: dict, perfil: dict) -> dict:
             "Cite a fonte na legenda."
         )
     if opcoes.get("cta"):
-        pedido.append(f"CTA DESEJADO (ajuste se ferir a regra da OAB): {opcoes['cta']}")
+        pedido.append(f"CTA DESEJADO (ajuste se ferir a regra da OAB): {opcoes['cta']}" if oab else f"CTA DESEJADO: {opcoes['cta']}")
     pedido.append("Escreva o post agora.")
 
     resposta = _cliente().messages.create(
@@ -471,11 +514,13 @@ Parta das dores, crenças erradas e "inimigos" do público descritos acima. Vari
 e os ganchos (erro comum, mito x verdade, passo a passo, "o que ninguém te conta", checklist).
 Deixe fonte_nome, fonte_url e data vazios."""
 
+    oab = segue_oab(perfil)
     system = "\n\n".join(p for p in [
-        "Você é o estrategista de conteúdo de um advogado no Instagram.",
+        "Você é o estrategista de conteúdo de um advogado no Instagram." if oab
+        else "Você é o estrategista de conteúdo de um profissional ou de uma marca no Instagram.",
         _bloco_perfil(perfil),
         (perfil.get("publico") or "").strip(),
-        REGRAS_OAB,
+        REGRAS_OAB if oab else REGRAS_GERAIS,
         SAIDA_JSON_PAUTAS,
     ] if p)
     kwargs = dict(model=MODELO, max_tokens=6000, system=system, messages=[{"role": "user", "content": instrucao}])
