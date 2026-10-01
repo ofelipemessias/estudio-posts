@@ -2,6 +2,15 @@
 
 Registro da evolução do Estúdio de Posts. Datas no formato AAAA-MM-DD.
 
+## [0.10.1] - 2026-10-01
+### Corrigido
+- O checkout com cartão do Asaas exige telefone no cadastro do cliente
+  ("O campo phone deve existir para o customer informado"). A tela de
+  assinatura agora pede o **celular com DDD** (uma vez só) e envia ao Asaas;
+  clientes já cadastrados sem telefone são atualizados automaticamente.
+- `.env.example`: aviso pra colocar a chave do Asaas (que começa com `$`)
+  entre aspas simples, senão o Docker apaga a chave.
+
 ## [0.10.0] - 2026-10-01
 ### Adicionado
 - **Assinatura pelo Asaas** (`motor/pagamentos.py`, só biblioteca padrão):

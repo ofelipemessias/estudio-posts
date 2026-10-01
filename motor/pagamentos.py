@@ -77,12 +77,19 @@ def so_digitos(texto: str) -> str:
     return "".join(c for c in (texto or "") if c.isdigit())
 
 
-def criar_cliente(nome: str, email: str, cpf_cnpj: str, referencia: str) -> str:
+def criar_cliente(nome: str, email: str, cpf_cnpj: str, referencia: str, telefone: str) -> str:
+    tel = so_digitos(telefone)
     r = _requisicao("POST", "/customers", {
         "name": (nome or "Cliente")[:100], "email": email, "cpfCnpj": so_digitos(cpf_cnpj),
+        "phone": tel, "mobilePhone": tel,  # o checkout do cartão exige telefone
         "externalReference": referencia, "notificationDisabled": False,
     })
     return r["id"]
+
+
+def atualizar_telefone(customer_id: str, telefone: str):
+    tel = so_digitos(telefone)
+    _requisicao("POST", f"/customers/{urllib.parse.quote(customer_id)}", {"phone": tel, "mobilePhone": tel})
 
 
 def checkout_cartao(customer_id: str, nome_plano: str, valor: float, urls: dict) -> dict:

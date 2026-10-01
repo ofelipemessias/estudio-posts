@@ -21,7 +21,8 @@ def ok(c, m):
         FALHAS.append(m)
 
 CHAMADAS = {"clientes": [], "checkouts": [], "pix": [], "cancelados": []}
-PG.criar_cliente = lambda nome, email, doc, ref: (CHAMADAS["clientes"].append((nome, email, doc, ref)), "cus_ana")[1]
+PG.criar_cliente = lambda nome, email, doc, ref, tel: (CHAMADAS["clientes"].append((nome, email, doc, ref, tel)), "cus_ana")[1]
+PG.atualizar_telefone = lambda cid, tel: CHAMADAS.setdefault("telefones", []).append((cid, tel))
 PG.checkout_cartao = lambda c, n, v, urls: (CHAMADAS["checkouts"].append((c, n, v, urls)), {"id": "ck1", "url": "https://sandbox.asaas.com/checkoutSession/show?id=ck1"})[1]
 PG.assinatura_pix = lambda c, n, v, ref: (CHAMADAS["pix"].append((c, n, v)), {"id": "sub_pix", "url": "https://sandbox.asaas.com/i/123"})[1]
 PG.cancelar_assinatura = lambda sid: CHAMADAS["cancelados"].append(sid)
@@ -48,10 +49,13 @@ a = ana.get("/api/assinatura").json
 ok(a["configurada"] and [p["valor"] for p in a["planos"]] == [197.0, 247.0], "planos e preços vêm do .env")
 
 # --- assinar no cartão ---
-ok(ana.post("/api/assinatura/iniciar", json={"plano": "completo", "forma": "cartao", "cpf_cnpj": "123"}).status_code == 400, "recusa CPF/CNPJ inválido")
-r = ana.post("/api/assinatura/iniciar", json={"plano": "completo", "forma": "cartao", "cpf_cnpj": "529.982.247-25"})
+ok(ana.post("/api/assinatura/iniciar", json={"plano": "completo", "forma": "cartao", "cpf_cnpj": "52998224725"}).status_code == 400, "exige celular (o checkout do Asaas pede telefone)")
+ok(ana.post("/api/assinatura/iniciar", json={"plano": "completo", "forma": "cartao", "cpf_cnpj": "123", "telefone": "17991234567"}).status_code == 400, "recusa CPF/CNPJ inválido")
+r = ana.post("/api/assinatura/iniciar", json={"plano": "completo", "forma": "cartao", "cpf_cnpj": "529.982.247-25", "telefone": "(17) 99123-4567"})
 ok(r.status_code == 200 and "checkoutSession" in r.json["url"], "cartão: devolve o link do checkout do Asaas")
-ok(CHAMADAS["clientes"][0][2] == "52998224725" and CHAMADAS["checkouts"][0][2] == 247.0, "cria cliente no Asaas e checkout de R$ 247")
+ok(CHAMADAS["clientes"][0][2] == "52998224725" and CHAMADAS["clientes"][0][4] == "17991234567" and CHAMADAS["checkouts"][0][2] == 247.0,
+   "cria cliente no Asaas (com telefone) e checkout de R$ 247")
+ok(ana.get("/api/assinatura").json["tem_telefone"], "não pede o celular de novo")
 ok("assinatura=sucesso" in CHAMADAS["checkouts"][0][3]["sucesso"], "volta pro sistema depois de pagar")
 ok(usuario()["asaas_customer_id"] == "cus_ana" and usuario()["plano_pendente"] == "completo", "guarda cliente e plano escolhido")
 
@@ -98,6 +102,12 @@ ok(ana.get("/api/perfis").status_code == 200, "cancelada: continua usando até o
 # --- estorno ---
 webhook({"id": "evt5", "event": "PAYMENT_REFUNDED", "payment": {"customer": "cus_ana", "value": 197.0}})
 ok(usuario()["assinatura_status"] == "estornada" and ana.get("/api/perfis").status_code == 403, "estorno encerra o acesso")
+
+# --- cliente cadastrado antes, sem telefone ---
+with banco() as c: c.execute("UPDATE usuarios SET asaas_telefone_ok=NULL WHERE id=?", (uid,))
+vencer()
+r = ana.post("/api/assinatura/iniciar", json={"plano": "essencial", "forma": "cartao", "telefone": "17991234567"})
+ok(r.status_code == 200 and CHAMADAS["telefones"][-1] == ("cus_ana", "17991234567"), "cliente antigo sem telefone: atualiza o telefone no Asaas")
 
 # --- outros ---
 ok(webhook({"id": "evt6", "event": "PAYMENT_CONFIRMED", "payment": {"customer": "cus_outra", "value": 10}}).json["resultado"] == "cliente_desconhecido",
