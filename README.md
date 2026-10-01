@@ -121,12 +121,14 @@ python tests/teste_assinatura.py
 python tests/teste_precos.py
 python tests/teste_limpeza_slides.py
 python tests/teste_regras_oab.py
+python tests/teste_fase1.py
 ```
 
 ## Arquivos
 
 - `app.py`: servidor, contas, convites, painel e rotas
 - `motor/gerar_post.py`: prompts, regras da OAB, modelos de área, radar
+- `motor/emails.py`: e-mails automáticos (Resend)
 - `motor/pagamentos.py`: assinaturas e cobrança (API do Asaas)
 - `motor/publicador.py`: publicação e agendamento no Instagram (API do Zernio)
 - `motor/render_post.py`: desenho das artes (baseado no renderizador

@@ -2,6 +2,28 @@
 
 Registro da evolução do Estúdio de Posts. Datas no formato AAAA-MM-DD.
 
+## [0.14.0] - 2026-10-01
+### Adicionado
+- **E-mails automáticos** pelo Resend (`motor/emails.py`): convite (opcional no
+  painel), boas-vindas ao criar a senha, "seu primeiro post leva 1 minuto"
+  (24h a 72h sem nenhum post), "seu teste termina em X dias" (até 2 dias) e
+  "seu teste terminou" (até 3 dias depois), com a oferta de fundador. Cada um
+  no máximo uma vez por pessoa; rotina a cada 30 minutos. Respostas vão pro
+  `EMAIL_RESPONDER_PARA`. Sem `RESEND_API_KEY`, nada é enviado.
+- **Sugestões de tema** na tela de criar post (geradas pela IA a partir do
+  perfil, guardadas por 7 dias; "🔄 Outras ideias" com limite diário pro
+  convidado em `LIMITE_SUGESTOES_DIA`; sem IA, usa os temas do perfil).
+- **Paletas prontas** na aba Perfil (Clássico jurídico, Moderno azul, Elegante
+  verde, Sóbrio bordô, Minimalista, Confiança azul, Premium).
+- Botão **Ajuda** (WhatsApp e e-mail: `SUPORTE_WHATSAPP`, `SUPORTE_EMAIL`).
+- **Minha conta** (clicar no nome): trocar senha e **excluir a conta** (LGPD).
+- "Sem fidelidade: cancele quando quiser" na tela de planos.
+- Testes `tests/teste_fase1.py`.
+### Corrigido
+- **Remover uma pessoa pelo painel não cancelava a assinatura no Asaas** (ela
+  continuaria sendo cobrada). Agora a remoção, pelo dono ou pela própria
+  pessoa, cancela a cobrança antes de apagar os dados.
+
 ## [0.13.0] - 2026-10-01
 ### Adicionado
 - Opção por perfil **"Seguir as regras de publicidade da OAB (Provimento

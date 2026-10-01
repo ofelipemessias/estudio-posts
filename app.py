@@ -35,7 +35,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
-from motor import gerar_post, pagamentos, publicador, render_post
+from motor import emails, gerar_post, pagamentos, publicador, render_post
 
 BASE = Path(__file__).resolve().parent
 DADOS = Path(os.environ.get("DADOS_DIR", BASE / "dados"))
@@ -240,6 +240,9 @@ def iniciar_banco():
             con.execute("ALTER TABLE perfis ADD COLUMN usuario_id TEXT")
         if "voz" not in colunas:
             con.execute("ALTER TABLE perfis ADD COLUMN voz TEXT NOT NULL DEFAULT 'neutra'")
+        for coluna in ("sugestoes", "sugestoes_em"):
+            if coluna not in colunas:
+                con.execute(f"ALTER TABLE perfis ADD COLUMN {coluna} TEXT")
         if "regras_oab" not in colunas:
             con.execute("ALTER TABLE perfis ADD COLUMN regras_oab INTEGER NOT NULL DEFAULT 1")
         for coluna in ("zernio_profile_id", "ig_account_id", "ig_username"):
@@ -259,6 +262,10 @@ def iniciar_banco():
                 con.execute(f"ALTER TABLE usuarios ADD COLUMN {coluna} INTEGER NOT NULL DEFAULT 0")
         if "valor_assinatura" not in cols_u2:
             con.execute("ALTER TABLE usuarios ADD COLUMN valor_assinatura REAL")
+        if "ativado_em" not in cols_u2:
+            con.execute("ALTER TABLE usuarios ADD COLUMN ativado_em TEXT")
+        con.execute("CREATE TABLE IF NOT EXISTS emails_enviados (usuario_id TEXT NOT NULL, tipo TEXT NOT NULL, enviado_em TEXT NOT NULL, "
+                    "PRIMARY KEY (usuario_id, tipo))")
         con.execute("CREATE TABLE IF NOT EXISTS pagamentos_processados (id TEXT PRIMARY KEY, usuario_id TEXT, processado_em TEXT NOT NULL)")
         con.execute("""
             CREATE TABLE IF NOT EXISTS agendamentos (
@@ -506,6 +513,9 @@ def _dados_eu(u: dict) -> dict:
         "limite_posts_mes": u["limite_posts_mes"], "limite_radar_mes": u["limite_radar_mes"],
         "posts_mes": contagem_mes(u["id"], "posts"), "radar_mes": contagem_mes(u["id"], "pautas"),
         "publicacao": {"configurada": publicador.configurado(), "liberada": pode_publicar(u)},
+        "suporte": {"whatsapp": "".join(c for c in os.environ.get("SUPORTE_WHATSAPP", "") if c.isdigit()),
+                    "email": os.environ.get("SUPORTE_EMAIL", "").strip()},
+        "emails_configurados": emails.configurado(),
         "assinatura": {"configurada": pagamentos.configurado() and u["papel"] != "dono", "plano": u.get("plano"),
                        "status": u.get("assinatura_status"), "pagante": bool(u.get("pagante"))},
     }
@@ -590,13 +600,14 @@ def aceitar_convite(token):
     senha = (request.get_json(silent=True) or {}).get("senha") or ""
     if len(senha) < 8:
         return jsonify({"erro": "A senha precisa ter pelo menos 8 caracteres."}), 400
+    primeira_ativacao = u["status"] == "convidado"
     with conectar() as con:
-        if u["status"] == "convidado":
+        if primeira_ativacao:
             # Primeiro acesso: o prazo começa a contar a partir de agora.
             acesso_ate = (datetime.now() + timedelta(days=u["dias_acesso"])).isoformat(timespec="seconds") if u["dias_acesso"] else None
             con.execute(
-                "UPDATE usuarios SET senha_hash=?, status='ativo', acesso_ate=?, token_convite=NULL, convite_expira=NULL, ultimo_acesso=? WHERE id=?",
-                (generate_password_hash(senha), acesso_ate, agora(), u["id"]),
+                "UPDATE usuarios SET senha_hash=?, status='ativo', acesso_ate=?, token_convite=NULL, convite_expira=NULL, ultimo_acesso=?, ativado_em=? WHERE id=?",
+                (generate_password_hash(senha), acesso_ate, agora(), agora(), u["id"]),
             )
         else:
             # Redefinição de senha: mantém prazo e situação.
@@ -607,6 +618,9 @@ def aceitar_convite(token):
     session.clear()
     session.permanent = True
     session["uid"] = u["id"]
+    if primeira_ativacao:
+        enviar_email_unico(buscar_usuario(usuario_id=u["id"]), "boas_vindas",
+                           emails.boas_vindas(APP_NOME, u["nome"], url_base()), em_segundo_plano=True)
     return jsonify(_dados_eu(buscar_usuario(usuario_id=u["id"])))
 
 
@@ -676,7 +690,11 @@ def admin_convidar():
              _int_ou_none(p.get("limite_posts_mes")) or LIMITE_POSTS_PADRAO, _int_ou_none(p.get("limite_radar_mes")) or LIMITE_RADAR_PADRAO,
              1 if p.get("pagante") else 0, (p.get("observacao") or "").strip()[:500], token, expira, agora()),
         )
-    return jsonify({"link_convite": _link_convite(token)}), 201
+    email_enviado = None
+    if p.get("enviar_email") and emails.configurado():
+        novo = buscar_usuario(email=email)
+        email_enviado = enviar_email_unico(novo, "convite", emails.convite(APP_NOME, nome, _link_convite(token), _int_ou_none(p.get("dias_acesso"))))
+    return jsonify({"link_convite": _link_convite(token), "email_enviado": email_enviado}), 201
 
 
 @app.put("/api/admin/usuarios/<usuario_id>")
@@ -736,12 +754,54 @@ def admin_remover(usuario_id):
     u = buscar_usuario(usuario_id=usuario_id)
     if not u or u["papel"] == "dono":
         return jsonify({"erro": "Pessoa não encontrada."}), 404
+    _remover_pessoa(u)
+    return jsonify({"ok": True})
+
+
+def _remover_pessoa(u: dict):
+    """Remove a pessoa por completo: cancela a cobrança no Asaas (pra não
+    continuar cobrando), desconecta os Instagrams, apaga perfis, posts,
+    artes e a conta."""
+    for sub in {u.get("asaas_subscription_id"), u.get("asaas_assinatura_pendente")} - {None, ""}:
+        if pagamentos.configurado():
+            pagamentos.cancelar_assinatura(sub)
     with conectar() as con:
-        perfis = [r[0] for r in con.execute("SELECT id FROM perfis WHERE usuario_id=?", (usuario_id,)).fetchall()]
+        perfis = [r[0] for r in con.execute("SELECT id FROM perfis WHERE usuario_id=?", (u["id"],)).fetchall()]
     for pid in perfis:
         _apagar_perfil_completo(pid)
     with conectar() as con:
-        con.execute("DELETE FROM usuarios WHERE id=?", (usuario_id,))
+        con.execute("DELETE FROM emails_enviados WHERE usuario_id=?", (u["id"],))
+        con.execute("DELETE FROM usuarios WHERE id=?", (u["id"],))
+
+
+# ─── Minha conta (a própria pessoa) ───
+
+@app.post("/api/conta/senha")
+@login_conta
+def trocar_senha():
+    p = request.get_json(silent=True) or {}
+    u = g.usuario
+    if not u["senha_hash"] or not check_password_hash(u["senha_hash"], p.get("atual") or ""):
+        return jsonify({"erro": "A senha atual não confere."}), 400
+    nova = p.get("nova") or ""
+    if len(nova) < 8:
+        return jsonify({"erro": "A nova senha precisa ter pelo menos 8 caracteres."}), 400
+    with conectar() as con:
+        con.execute("UPDATE usuarios SET senha_hash=? WHERE id=?", (generate_password_hash(nova), u["id"]))
+    return jsonify({"ok": True})
+
+
+@app.post("/api/conta/excluir")
+@login_conta
+def excluir_minha_conta():
+    p = request.get_json(silent=True) or {}
+    u = g.usuario
+    if u["papel"] == "dono":
+        return jsonify({"erro": "A conta de dono não pode ser excluída por aqui."}), 400
+    if not u["senha_hash"] or not check_password_hash(u["senha_hash"], p.get("senha") or ""):
+        return jsonify({"erro": "Senha incorreta."}), 400
+    _remover_pessoa(u)
+    session.clear()
     return jsonify({"ok": True})
 
 
@@ -1236,6 +1296,101 @@ def webhook_asaas():
     return jsonify({"ok": True, "resultado": resultado})
 
 
+# ═════════════════════════ E-mails automáticos ═════════════════════════
+
+def url_base() -> str:
+    """Endereço público do sistema (pros links dos e-mails). Fora de uma
+    requisição (rotina automática), usa APP_URL do .env."""
+    fixo = os.environ.get("APP_URL", "").strip().rstrip("/")
+    if fixo:
+        return fixo
+    try:
+        return request.host_url.rstrip("/")
+    except RuntimeError:
+        return ""
+
+
+def enviar_email_unico(u, tipo: str, conteudo: tuple, em_segundo_plano: bool = False):
+    """Envia cada tipo de e-mail no máximo uma vez por pessoa."""
+    if not u or not emails.configurado():
+        return None
+    with conectar() as con:
+        if con.execute("SELECT 1 FROM emails_enviados WHERE usuario_id=? AND tipo=?", (u["id"], tipo)).fetchone():
+            return False
+    assunto, corpo_html, corpo_txt = conteudo
+
+    def _enviar():
+        if emails.enviar(u["email"], assunto, corpo_html, corpo_txt):
+            with conectar() as con:
+                con.execute("INSERT OR IGNORE INTO emails_enviados (usuario_id, tipo, enviado_em) VALUES (?,?,?)", (u["id"], tipo, agora()))
+            return True
+        return False
+    if em_segundo_plano:
+        threading.Thread(target=_enviar, daemon=True).start()
+        return None
+    return _enviar()
+
+
+def _oferta_texto() -> str:
+    precos = precos_atuais()
+    e = precos["essencial"]
+    if e["fundador"]:
+        prazo = ""
+        if FUNDADOR_ATE:
+            try:
+                prazo = " só até " + datetime.strptime(FUNDADOR_ATE, "%Y-%m-%d").strftime("%d/%m")
+            except ValueError:
+                prazo = ""
+        return (f"Preço de fundador{prazo} (ou enquanto durarem as vagas): a partir de R$ {e['mensal']:.0f}/mês, "
+                "travado enquanto você mantiver a assinatura.")
+    return f"Planos a partir de R$ {e['mensal']:.0f}/mês. Sem fidelidade: cancele quando quiser."
+
+
+def rodar_rotina_emails(agora_dt: datetime | None = None) -> list:
+    """Lembrete do primeiro post (24h a 72h após ativar, sem nenhum post),
+    teste acabando (faltando até 2 dias) e teste encerrado (até 3 dias
+    depois). Cada um no máximo uma vez por pessoa."""
+    if not emails.configurado() or not url_base():
+        return []
+    agora_dt = agora_dt or datetime.now()
+    enviados = []
+    with conectar() as con:
+        clientes = [dict(r) for r in con.execute("SELECT * FROM usuarios WHERE papel='cliente' AND status='ativo'").fetchall()]
+        sem_post = {r[0] for r in con.execute(
+            "SELECT u.id FROM usuarios u WHERE NOT EXISTS (SELECT 1 FROM posts p JOIN perfis f ON f.id=p.perfil_id WHERE f.usuario_id=u.id)").fetchall()}
+    for u in clientes:
+        ativado = _dt(u.get("ativado_em"))
+        if ativado and u["id"] in sem_post and timedelta(hours=24) <= agora_dt - ativado <= timedelta(hours=72):
+            if enviar_email_unico(u, "lembrete_primeiro_post", emails.lembrete_primeiro_post(APP_NOME, u["nome"], url_base())):
+                enviados.append(("lembrete_primeiro_post", u["email"]))
+        fim = _dt(u.get("acesso_ate"))
+        if u["pagante"] or not fim or not pagamentos.configurado():
+            continue
+        if timedelta(0) < fim - agora_dt <= timedelta(days=2):
+            dias = max(1, (fim.date() - agora_dt.date()).days)
+            if enviar_email_unico(u, "teste_acabando", emails.teste_acabando(APP_NOME, u["nome"], url_base(), dias, _oferta_texto())):
+                enviados.append(("teste_acabando", u["email"]))
+        elif timedelta(0) <= agora_dt - fim <= timedelta(days=3):
+            if enviar_email_unico(u, "teste_encerrado", emails.teste_encerrado(APP_NOME, u["nome"], url_base(), _oferta_texto())):
+                enviados.append(("teste_encerrado", u["email"]))
+    return enviados
+
+
+def _laco_emails():
+    time.sleep(60)
+    while True:
+        try:
+            with app.app_context():
+                rodar_rotina_emails()
+        except Exception as e:  # nunca derruba o app por causa de e-mail
+            app.logger.warning("rotina de e-mails falhou: %s", e)
+        time.sleep(30 * 60)
+
+
+if os.environ.get("EMAILS_AUTOMATICOS", "1") == "1":
+    threading.Thread(target=_laco_emails, daemon=True).start()
+
+
 # ═════════════════════════ Páginas ═════════════════════════
 
 @app.get("/")
@@ -1367,6 +1522,43 @@ def criar_perfil():
     return jsonify({"id": perfil_id, "aviso": aviso}), 201
 
 
+LIMITE_SUGESTOES_DIA = int(os.environ.get("LIMITE_SUGESTOES_DIA", "5"))
+
+
+@app.get("/api/perfis/<perfil_id>/sugestoes")
+@login_obrigatorio
+def sugestoes_de_tema(perfil_id):
+    """Ideias de tema pra tela de criar post. Ficam guardadas por 7 dias;
+    ?novas=1 gera outra lista (com limite diário pro convidado)."""
+    perfil = perfil_autorizado(perfil_id)
+    if not perfil:
+        return jsonify({"erro": "Perfil não encontrado."}), 404
+    with conectar() as con:
+        r = con.execute("SELECT sugestoes, sugestoes_em FROM perfis WHERE id=?", (perfil_id,)).fetchone()
+    novas = request.args.get("novas") == "1"
+    guardadas = json.loads(r["sugestoes"]) if r and r["sugestoes"] else None
+    recente = r and r["sugestoes_em"] and _dt(r["sugestoes_em"]) > datetime.now() - timedelta(days=7)
+    if guardadas and recente and not novas:
+        return jsonify({"sugestoes": guardadas})
+    if novas and g.usuario["papel"] != "dono":
+        with conectar() as con:
+            hoje = datetime.now().strftime("%Y-%m-%d")
+            usadas = con.execute("SELECT COUNT(*) FROM uso_ia WHERE usuario_id=? AND tipo='sugestoes_novas' AND criado_em>=?", (g.usuario["id"], hoje)).fetchone()[0]
+        if usadas >= LIMITE_SUGESTOES_DIA:
+            return jsonify({"sugestoes": guardadas or gerar_post.sugestoes_basicas(perfil), "aviso": "Você já pediu bastante ideia hoje. Amanhã tem mais!"})
+    try:
+        lista, uso = gerar_post.sugerir_temas(perfil)
+        registrar_uso(perfil["usuario_id"] if g.usuario["papel"] == "dono" else g.usuario["id"], perfil_id,
+                      "sugestoes_novas" if novas else "sugestoes", uso)
+    except Exception:
+        lista = []
+    if not lista:
+        return jsonify({"sugestoes": guardadas or gerar_post.sugestoes_basicas(perfil)})
+    with conectar() as con:
+        con.execute("UPDATE perfis SET sugestoes=?, sugestoes_em=? WHERE id=?", (json.dumps(lista, ensure_ascii=False), agora(), perfil_id))
+    return jsonify({"sugestoes": lista})
+
+
 @app.post("/api/perfis/<perfil_id>/sugerir_area")
 @login_obrigatorio
 def sugerir_area(perfil_id):
@@ -1405,7 +1597,7 @@ def salvar_perfil(perfil_id):
     estilo = p.get("estilo_visual") if p.get("estilo_visual") in render_post.ESTILOS else "claro"
     with conectar() as con:
         con.execute(
-            "UPDATE perfis SET nome_exibicao=?, handle=?, area=?, sobre=?, frentes=?, publico=?, dna=?, estilo_visual=?, cores=?, voz=?, regras_oab=? WHERE id=?",
+            "UPDATE perfis SET nome_exibicao=?, handle=?, area=?, sobre=?, frentes=?, publico=?, dna=?, estilo_visual=?, cores=?, voz=?, regras_oab=?, sugestoes_em=NULL WHERE id=?",
             (nome[:120], (p.get("handle") or "").strip()[:80], (p.get("area") or "").strip()[:200],
              (p.get("sobre") or "").strip()[:2000], json.dumps(_limpar_frentes(p.get("frentes")), ensure_ascii=False),
              (p.get("publico") or "").strip()[:12000], (p.get("dna") or "").strip()[:20000], estilo,

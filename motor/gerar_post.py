@@ -584,6 +584,44 @@ def sugerir_area(area: str, sobre: str = "") -> tuple[dict, dict]:
     return {"area": _sem_travessao(str(dados.get("area") or area))[:200], "frentes": frentes[:6], "publico": publico}, extrair_uso(resposta)
 
 
+def sugerir_temas(perfil: dict, quantidade: int = 8) -> tuple[list, dict]:
+    """Ideias curtas de tema pra tela de criar post (sem busca na web).
+    Devolve ([{"tema", "frente"}], uso)."""
+    frentes = [f.get("nome") for f in perfil.get("frentes") or [] if f.get("nome")]
+    oab = segue_oab(perfil)
+    system = "\n\n".join(p for p in [
+        "Você sugere temas de posts pro Instagram, específicos e com cara de dúvida real do público.",
+        _bloco_perfil(perfil),
+        (perfil.get("publico") or "").strip(),
+        REGRAS_OAB if oab else REGRAS_GERAIS,
+        f"""SAÍDA — SOMENTE um JSON válido (sem texto antes ou depois), assim:
+{{"sugestoes": [{{"tema": "tema curto, até 9 palavras, sem ponto final", "frente": "um destes: {", ".join(frentes) or "Geral"}"}}]}}
+Gere {quantidade} sugestões variadas (erro comum, mito x verdade, passo a passo, o que fazer quando...),
+distribuídas entre os temas da área. Nada de travessão.""",
+    ] if p)
+    resposta = _cliente().messages.create(model=MODELO, max_tokens=900, system=system,
+                                          messages=[{"role": "user", "content": "Sugira os temas agora."}])
+    dados = _extrair_json(_ultimo_texto(resposta))
+    saida = []
+    for s in dados.get("sugestoes") or []:
+        tema = _sem_travessao(str((s or {}).get("tema") or "")).strip().rstrip(".")[:90]
+        if tema:
+            frente = str(s.get("frente") or "")
+            saida.append({"tema": tema, "frente": frente if frente in frentes else (frentes[0] if frentes else "")})
+    return saida[:quantidade], extrair_uso(resposta)
+
+
+def sugestoes_basicas(perfil: dict) -> list:
+    """Sem IA: transforma as descrições dos temas da área em sugestões."""
+    saida = []
+    for f in perfil.get("frentes") or []:
+        for pedaco in re.split(r"[,;]", f.get("descricao") or ""):
+            pedaco = pedaco.strip().rstrip(".")
+            if 3 <= len(pedaco) <= 80:
+                saida.append({"tema": pedaco[0].upper() + pedaco[1:], "frente": f.get("nome") or ""})
+    return saida[:8]
+
+
 def texto_legenda_completa(dados: dict) -> str:
     legenda = dados.get("legenda") or ""
     hashtags = " ".join(dados.get("hashtags") or [])
