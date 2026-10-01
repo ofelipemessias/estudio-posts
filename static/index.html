@@ -310,7 +310,7 @@
           <span><b>⚡ Pix</b><span class="info" style="margin:0;">Você recebe a cobrança todo mês e paga pelo app do banco.</span></span></label>
       </div>
       <div class="grade-2">
-        <div class="campo oculto" id="campo-documento"><label for="assinar-doc">CPF ou CNPJ (pra nota fiscal)</label><input id="assinar-doc" inputmode="numeric" placeholder="Só números"></div>
+        <div class="campo oculto" id="campo-documento"><label for="assinar-doc">CPF ou CNPJ do titular</label><input id="assinar-doc" inputmode="numeric" placeholder="Só números"></div>
         <div class="campo oculto" id="campo-telefone"><label for="assinar-tel">Celular com DDD</label><input id="assinar-tel" inputmode="tel" placeholder="Ex.: 17991234567"></div>
       </div>
       <div class="oculto" id="campos-endereco">
@@ -1003,9 +1003,10 @@
     try { dadosAssinatura = await api("/api/assinatura"); } catch (e) { mostrarErro("erro-assinar", e.message); return; }
     const a = dadosAssinatura, vencido = a.situacao === "expirado";
     $("btn-fechar-assinar").classList.toggle("oculto", vencido);
-    $("campo-documento").classList.toggle("oculto", a.tem_cadastro);
-    $("campo-telefone").classList.toggle("oculto", a.cadastro_completo);
-    $("campos-endereco").classList.toggle("oculto", a.cadastro_completo);
+    const pre = a.dados_cobranca || {};
+    [["assinar-doc", "cpf_cnpj"], ["assinar-tel", "telefone"], ["assinar-cep", "cep"], ["assinar-numero", "numero"],
+     ["assinar-rua", "rua"], ["assinar-bairro", "bairro"], ["assinar-compl", "complemento"]].forEach(([id, k]) => { if (pre[k] && !$(id).value) $(id).value = pre[k]; });
+    atualizarCamposCobranca();
     const ate = a.acesso_ate ? new Date(a.acesso_ate).toLocaleDateString("pt-BR") : null;
     const temAssinatura = a.pagante && ["ativa", "atrasada"].includes(a.status);
     if (vencido){
@@ -1039,6 +1040,16 @@
     planoEscolhido = a.planos.some((p) => p.id === a.plano) ? a.plano : "essencial";
     renderPlanos();
   }
+
+  function atualizarCamposCobranca(){
+    const a = dadosAssinatura || {};
+    const cartao = (document.querySelector('input[name="forma"]:checked') || {}).value === "cartao";
+    const precisa = cartao || !a.cadastro_completo;
+    $("campo-documento").classList.toggle("oculto", !(cartao || !a.tem_cadastro));
+    $("campo-telefone").classList.toggle("oculto", !precisa);
+    $("campos-endereco").classList.toggle("oculto", !precisa);
+  }
+  document.querySelectorAll('input[name="forma"]').forEach((r) => r.addEventListener("change", atualizarCamposCobranca));
 
   function renderPlanos(){
     const a = dadosAssinatura;

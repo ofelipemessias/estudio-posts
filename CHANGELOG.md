@@ -2,6 +2,15 @@
 
 Registro da evolução do Estúdio de Posts. Datas no formato AAAA-MM-DD.
 
+## [0.10.4] - 2026-10-01
+### Corrigido
+- "O campo postalCode é inválido": com o cadastro marcado como completo, o
+  sistema usava o endereço salvo no Asaas, que podia estar incompleto. Agora,
+  no pagamento com cartão, a tela **sempre mostra os dados de cobrança**
+  (CPF/CNPJ, celular e endereço), **já preenchidos** com o que estiver salvo,
+  e o sistema confere tudo (inclusive o CEP no ViaCEP) antes de abrir o
+  checkout.
+
 ## [0.10.3] - 2026-10-01
 ### Corrigido
 - O checkout com cartão também exigia a **cidade** do cliente ("O campo city

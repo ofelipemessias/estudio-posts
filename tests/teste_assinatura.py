@@ -64,7 +64,9 @@ r = ana.post("/api/assinatura/iniciar", json={"plano": "completo", "forma": "car
 ok(r.status_code == 200 and "checkoutSession" in r.json["url"], "cartão: devolve o link do checkout do Asaas")
 ok(CHAMADAS["clientes"][0][2] == "52998224725" and CHAMADAS["clientes"][0][4] == "17991234567" and CHAMADAS["clientes"][0][5]["rua"] == "Av. Teste"
    and CHAMADAS["checkouts"][0][2] == 247.0, "cria cliente no Asaas (com telefone e endereço) e checkout de R$ 247")
-ok(ana.get("/api/assinatura").json["cadastro_completo"], "não pede celular e endereço de novo")
+a2 = ana.get("/api/assinatura").json
+ok(a2["cadastro_completo"] and a2["dados_cobranca"]["cep"] == "15015000" and a2["dados_cobranca"]["numero"] == "100", "tela vem preenchida com os dados de cobrança salvos")
+ok(ana.post("/api/assinatura/iniciar", json={"plano": "completo", "forma": "cartao"}).status_code == 400, "cartão sempre confere os dados de cobrança (não usa cadastro vazio)")
 d = CHAMADAS["checkouts"][0][0]
 ok(d["ibge"] == "3549805" and d["email"] == "ana@x.com" and d["cpf_cnpj"] and d["numero"] == "100" and CHAMADAS["checkouts"][0][4] == uid,
    "checkout leva os dados completos do pagador (com o código IBGE da cidade)")
@@ -127,7 +129,7 @@ ok(usuario()["assinatura_status"] == "estornada" and ana.get("/api/perfis").stat
 # --- cliente cadastrado antes, sem telefone ---
 with banco() as c: c.execute("UPDATE usuarios SET asaas_cadastro_ok=NULL WHERE id=?", (uid,))
 vencer()
-r = ana.post("/api/assinatura/iniciar", json={"plano": "essencial", "forma": "cartao", "telefone": "17991234567", **END})
+r = ana.post("/api/assinatura/iniciar", json={"plano": "essencial", "forma": "cartao", "cpf_cnpj": "52998224725", "telefone": "17991234567", **END})
 ok(r.status_code == 200 and CHAMADAS["atualizados"][-1][0] == "cus_checkout_ana" and CHAMADAS["atualizados"][-1][2]["numero"] == "100",
    "cadastro antigo incompleto: completa telefone e endereço no Asaas")
 

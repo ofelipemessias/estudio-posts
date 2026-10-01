@@ -913,7 +913,22 @@ def ver_assinatura():
         "plano": u["plano"], "status": u["assinatura_status"], "pagante": bool(u["pagante"]),
         "acesso_ate": u["acesso_ate"], "situacao": situacao_acesso(u), "tem_cadastro": bool(u["asaas_customer_id"]),
         "cadastro_completo": bool(u["asaas_cadastro_ok"]),
+        "dados_cobranca": _dados_cobranca_salvos(u),
     })
+
+
+def _dados_cobranca_salvos(u) -> dict:
+    """O que estiver salvo no cadastro do Asaas, pra preencher a tela (só
+    pra própria pessoa). Se não houver ou der erro, volta vazio."""
+    if not u["asaas_customer_id"] or not pagamentos.configurado():
+        return {}
+    try:
+        c = pagamentos.ver_cliente(u["asaas_customer_id"])
+    except pagamentos.ErroPagamento:
+        return {}
+    return {"cpf_cnpj": c.get("cpfCnpj") or "", "telefone": c.get("mobilePhone") or c.get("phone") or "",
+            "cep": pagamentos.so_digitos(c.get("postalCode")), "rua": c.get("address") or "", "numero": c.get("addressNumber") or "",
+            "complemento": c.get("complement") or "", "bairro": c.get("province") or ""}
 
 
 @app.post("/api/assinatura/iniciar")
@@ -931,11 +946,13 @@ def iniciar_assinatura():
         return jsonify({"erro": "Escolha o plano e a forma de pagamento."}), 400
     telefone = pagamentos.so_digitos(p.get("telefone"))
     endereco = {k: (str(p.get(k) or "")).strip() for k in ("cep", "rua", "numero", "complemento", "bairro")}
-    if not u["asaas_cadastro_ok"]:
+    if forma == "cartao" or not u["asaas_cadastro_ok"]:
         if len(telefone) not in (10, 11):
             return jsonify({"erro": "Informe seu celular com DDD (só números)."}), 400
         if len(pagamentos.so_digitos(endereco["cep"])) != 8 or not endereco["rua"] or not endereco["numero"] or not endereco["bairro"]:
             return jsonify({"erro": "Preencha o endereço: CEP, rua, número e bairro."}), 400
+    if forma == "cartao" and len(pagamentos.so_digitos(p.get("cpf_cnpj"))) not in (11, 14):
+        return jsonify({"erro": "Informe um CPF ou CNPJ válido (só números)."}), 400
     try:
         cliente = u["asaas_customer_id"]
         if not cliente:
@@ -989,19 +1006,12 @@ def cancelar_minha_assinatura():
 
 
 def _dados_pagador(u, cliente_id, p, telefone, endereco) -> dict:
-    """Dados completos do pagador pro checkout do cartão. Usa o que veio do
-    formulário; se a pessoa já tem cadastro completo, busca no Asaas."""
-    if endereco.get("cep") and endereco.get("rua"):
-        dados = {**endereco, "telefone": telefone, "cpf_cnpj": p.get("cpf_cnpj")}
-        if not pagamentos.so_digitos(dados["cpf_cnpj"]) and cliente_id:
-            dados["cpf_cnpj"] = pagamentos.ver_cliente(cliente_id).get("cpfCnpj")
-    else:
-        c = pagamentos.ver_cliente(cliente_id)
-        dados = {"cep": c.get("postalCode"), "rua": c.get("address"), "numero": c.get("addressNumber"), "complemento": c.get("complement"),
-                 "bairro": c.get("province"), "telefone": c.get("mobilePhone") or c.get("phone"), "cpf_cnpj": c.get("cpfCnpj")}
-    cep = pagamentos.buscar_cep(dados.get("cep") or "")
-    dados.update({"nome": u["nome"], "email": u["email"], "ibge": (cep or {}).get("ibge")})
-    return dados
+    """Dados completos do pagador pro checkout do cartão, sempre do
+    formulário (que já vem preenchido com o que estava salvo)."""
+    cep = pagamentos.buscar_cep(endereco.get("cep") or "")
+    if not cep or not cep.get("ibge"):
+        raise pagamentos.ErroPagamento("CEP não encontrado. Confira o CEP do endereço de cobrança.")
+    return {**endereco, "telefone": telefone, "cpf_cnpj": p.get("cpf_cnpj"), "nome": u["nome"], "email": u["email"], "ibge": cep["ibge"]}
 
 
 def _vincular_cliente_desconhecido(customer_id: str):
