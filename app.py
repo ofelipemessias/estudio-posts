@@ -952,7 +952,7 @@ def iniciar_assinatura():
         info = PLANOS[plano]
         nome_plano = f"{APP_NOME} {info['nome']}"
         if forma == "cartao":
-            r = pagamentos.checkout_cartao(cliente, nome_plano, info["valor"], _urls_retorno())
+            r = pagamentos.checkout_cartao(_dados_pagador(u, cliente, p, telefone, endereco), nome_plano, info["valor"], _urls_retorno(), u["id"])
         else:
             r = pagamentos.assinatura_pix(cliente, nome_plano, info["valor"], u["id"])
     except pagamentos.ErroPagamento as e:
@@ -988,6 +988,42 @@ def cancelar_minha_assinatura():
     return jsonify({"ok": True, "acesso_ate": fim})
 
 
+def _dados_pagador(u, cliente_id, p, telefone, endereco) -> dict:
+    """Dados completos do pagador pro checkout do cartão. Usa o que veio do
+    formulário; se a pessoa já tem cadastro completo, busca no Asaas."""
+    if endereco.get("cep") and endereco.get("rua"):
+        dados = {**endereco, "telefone": telefone, "cpf_cnpj": p.get("cpf_cnpj")}
+        if not pagamentos.so_digitos(dados["cpf_cnpj"]) and cliente_id:
+            dados["cpf_cnpj"] = pagamentos.ver_cliente(cliente_id).get("cpfCnpj")
+    else:
+        c = pagamentos.ver_cliente(cliente_id)
+        dados = {"cep": c.get("postalCode"), "rua": c.get("address"), "numero": c.get("addressNumber"), "complemento": c.get("complement"),
+                 "bairro": c.get("province"), "telefone": c.get("mobilePhone") or c.get("phone"), "cpf_cnpj": c.get("cpfCnpj")}
+    cep = pagamentos.buscar_cep(dados.get("cep") or "")
+    dados.update({"nome": u["nome"], "email": u["email"], "ibge": (cep or {}).get("ibge")})
+    return dados
+
+
+def _vincular_cliente_desconhecido(customer_id: str):
+    """O checkout do cartão cria o cliente do lado do Asaas. Quando chega um
+    pagamento de um cliente que ainda não conhecemos, consulta o cadastro no
+    Asaas e associa à pessoa pelo e-mail (único no sistema)."""
+    try:
+        c = pagamentos.ver_cliente(customer_id)
+    except pagamentos.ErroPagamento:
+        return None
+    email = (c.get("email") or "").strip().lower()
+    if not email:
+        return None
+    with conectar() as con:
+        # Só quem iniciou um pagamento pelo sistema (plano_pendente) e ainda não concluiu.
+        r = con.execute("SELECT * FROM usuarios WHERE lower(email)=? AND papel!='dono' AND plano_pendente IS NOT NULL", (email,)).fetchone()
+        if not r:
+            return None
+        con.execute("UPDATE usuarios SET asaas_customer_id=?, asaas_cadastro_ok='1' WHERE id=?", (customer_id, r["id"]))
+    return buscar_usuario(usuario_id=r["id"])
+
+
 def registrar_auditoria_pagamento(usuario_id, tipo, detalhe=""):
     app.logger.info("pagamento usuario=%s tipo=%s %s", usuario_id, tipo, detalhe)
 
@@ -1011,9 +1047,9 @@ def processar_evento_pagamento(evento: dict) -> str:
         return "ignorado"
     with conectar() as con:
         r = con.execute("SELECT * FROM usuarios WHERE asaas_customer_id=?", (cliente,)).fetchone()
-    if not r:
+    u = dict(r) if r else _vincular_cliente_desconhecido(cliente)
+    if not u:
         return "cliente_desconhecido"
-    u = dict(r)
 
     if tipo in ("PAYMENT_CONFIRMED", "PAYMENT_RECEIVED"):
         valor = float(pag.get("value") or 0)

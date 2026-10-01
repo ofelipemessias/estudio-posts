@@ -89,7 +89,8 @@ def buscar_cep(cep: str) -> dict | None:
         raise ErroPagamento("Não consegui consultar o CEP agora. Tente de novo em instantes.") from None
     if not d or d.get("erro"):
         return None
-    return {"rua": d.get("logradouro") or "", "bairro": d.get("bairro") or "", "cidade": d.get("localidade") or "", "uf": d.get("uf") or ""}
+    return {"rua": d.get("logradouro") or "", "bairro": d.get("bairro") or "", "cidade": d.get("localidade") or "",
+            "uf": d.get("uf") or "", "ibge": d.get("ibge") or ""}
 
 
 def _dados_cadastro(telefone: str, endereco: dict) -> dict:
@@ -116,17 +117,33 @@ def atualizar_cliente(customer_id: str, telefone: str, endereco: dict):
     _requisicao("POST", f"/customers/{urllib.parse.quote(customer_id)}", _dados_cadastro(telefone, endereco))
 
 
-def checkout_cartao(customer_id: str, nome_plano: str, valor: float, urls: dict) -> dict:
-    """Checkout recorrente no cartão. Devolve {"id", "url"}."""
+def ver_cliente(customer_id: str) -> dict:
+    return _requisicao("GET", f"/customers/{urllib.parse.quote(customer_id)}")
+
+
+def checkout_cartao(dados: dict, nome_plano: str, valor: float, urls: dict, referencia: str) -> dict:
+    """Checkout recorrente no cartão, com os dados completos do pagador em
+    customerData (o checkout exige telefone, endereço e o código IBGE da
+    cidade). Devolve {"id", "url"}."""
     agora = datetime.now(FUSO_BR).strftime("%Y-%m-%d %H:%M:%S")
+    tel = so_digitos(dados.get("telefone"))
+    cliente = {
+        "name": (dados.get("nome") or "Cliente")[:100], "cpfCnpj": so_digitos(dados.get("cpf_cnpj")), "email": dados.get("email"),
+        "phone": tel, "address": (dados.get("rua") or "")[:120], "addressNumber": (dados.get("numero") or "")[:20],
+        "complement": (dados.get("complemento") or "")[:100], "province": (dados.get("bairro") or "")[:80],
+        "postalCode": so_digitos(dados.get("cep")),
+    }
+    if str(dados.get("ibge") or "").isdigit():
+        cliente["city"] = int(dados["ibge"])
     r = _requisicao("POST", "/checkouts", {
         "billingTypes": ["CREDIT_CARD"],
         "chargeTypes": ["RECURRENT"],
         "minutesToExpire": 60,
+        "externalReference": referencia[:200],
         "callback": {"successUrl": urls["sucesso"], "cancelUrl": urls["cancelado"], "expiredUrl": urls["expirado"]},
         "items": [{"name": nome_plano[:60], "description": f"Assinatura mensal {nome_plano}"[:100], "quantity": 1, "value": round(valor, 2)}],
         "subscription": {"cycle": "MONTHLY", "nextDueDate": agora},
-        "customer": customer_id,
+        "customerData": cliente,
     })
     return {"id": r["id"], "url": base_checkout() + urllib.parse.quote(r["id"])}
 

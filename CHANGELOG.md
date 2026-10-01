@@ -2,6 +2,16 @@
 
 Registro da evolução do Estúdio de Posts. Datas no formato AAAA-MM-DD.
 
+## [0.10.3] - 2026-10-01
+### Corrigido
+- O checkout com cartão também exigia a **cidade** do cliente ("O campo city
+  deve existir para o customer informado"). Agora o checkout leva os dados
+  completos do pagador em `customerData`, inclusive o **código IBGE da cidade**
+  (vindo do ViaCEP), como a documentação do Asaas Checkout descreve.
+- Como o checkout cria o cliente do lado do Asaas, o webhook associa um
+  cliente ainda desconhecido à pessoa pelo **e-mail** (consultando o cadastro
+  no Asaas), só pra quem iniciou um pagamento pelo sistema.
+
 ## [0.10.2] - 2026-10-01
 ### Corrigido
 - O checkout com cartão do Asaas também exige **endereço** no cadastro do
