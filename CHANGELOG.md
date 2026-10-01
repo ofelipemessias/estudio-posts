@@ -2,6 +2,30 @@
 
 Registro da evolução do Estúdio de Posts. Datas no formato AAAA-MM-DD.
 
+## [0.10.0] - 2026-10-01
+### Adicionado
+- **Assinatura pelo Asaas** (`motor/pagamentos.py`, só biblioteca padrão):
+  - Planos **Essencial** e **Completo**, com preços no `.env`
+    (`PRECO_ESSENCIAL`, `PRECO_COMPLETO`) e os limites reais do plano.
+  - **Cartão de crédito em destaque** (Asaas Checkout recorrente: o cartão é
+    digitado na página do Asaas e as mensalidades são automáticas) ou **Pix**
+    (assinatura mensal com cobrança Pix).
+  - Fim do teste: a pessoa ainda entra, mas só vê a tela de assinatura
+    (perfis e posts ficam guardados). Faixa "Seu teste termina em X dias"
+    nos últimos 7 dias.
+  - **Webhook** `/webhooks/asaas` com senha (`ASAAS_WEBHOOK_TOKEN`, header
+    `asaas-access-token`) e proteção contra avisos repetidos. Pagamento
+    confirmado estende o acesso por 1 mês + tolerância (`DIAS_TOLERANCIA`),
+    marca como pagante e liga/desliga a publicação automática conforme o
+    plano. Atraso marca "atrasada" sem cortar na hora; estorno encerra o
+    acesso; trocar de plano cancela a assinatura anterior.
+  - Tela **"Minha assinatura"**: plano, situação, trocar de plano e cancelar
+    (o acesso vale até o fim do período pago).
+  - Painel do dono mostra plano e atraso.
+- Teste `tests/teste_assinatura.py`.
+### Alterado
+- Sem o Asaas configurado, tudo funciona como antes (convites manuais).
+
 ## [0.9.0] - 2026-09-30
 ### Adicionado
 - **Publicação e agendamento automáticos no Instagram** (plano "Completo"),

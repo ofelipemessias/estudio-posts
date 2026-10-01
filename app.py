@@ -17,6 +17,7 @@ import io
 import json
 import os
 import re
+import hmac
 import secrets
 import shutil
 import sqlite3
@@ -34,7 +35,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
-from motor import gerar_post, publicador, render_post
+from motor import gerar_post, pagamentos, publicador, render_post
 
 BASE = Path(__file__).resolve().parent
 DADOS = Path(os.environ.get("DADOS_DIR", BASE / "dados"))
@@ -53,6 +54,15 @@ COTACAO_DOLAR = float(os.environ.get("COTACAO_DOLAR", "5.50"))
 LIMITE_POSTS_PADRAO = int(os.environ.get("LIMITE_POSTS_MES_PADRAO", "60"))
 LIMITE_RADAR_PADRAO = int(os.environ.get("LIMITE_RADAR_MES_PADRAO", "12"))
 LIMITE_SUGESTAO_AREA_MES = int(os.environ.get("LIMITE_SUGESTAO_AREA_MES", "10"))
+# Planos (valores mensais em R$, mudam pelo .env) e tolerância de atraso.
+PLANOS = {
+    "essencial": {"nome": "Essencial", "valor": float(os.environ.get("PRECO_ESSENCIAL", "197")),
+                  "itens": [f"Até {LIMITE_POSTS_PADRAO} posts por mês, no seu nicho", f"Radar de pautas ({LIMITE_RADAR_PADRAO} buscas por mês)",
+                            "Artes prontas e legendas", "📱 Postar pelo celular"]},
+    "completo": {"nome": "Completo", "valor": float(os.environ.get("PRECO_COMPLETO", "247")),
+                 "itens": ["Tudo do Essencial", "Publicar direto no Instagram", "Agendar posts com data e hora", "Agenda de publicações"]},
+}
+DIAS_TOLERANCIA = int(os.environ.get("DIAS_TOLERANCIA", "3"))
 VALIDADE_CONVITE_DIAS = 7
 
 # Nome do produto mostrado na interface (login, topo, aba do navegador,
@@ -197,6 +207,10 @@ def iniciar_banco():
         cols_u = [r[1] for r in con.execute("PRAGMA table_info(usuarios)").fetchall()]
         if "publicacao_auto" not in cols_u:
             con.execute("ALTER TABLE usuarios ADD COLUMN publicacao_auto INTEGER NOT NULL DEFAULT 0")
+        for coluna in ("asaas_customer_id", "asaas_subscription_id", "plano", "plano_pendente", "assinatura_status"):
+            if coluna not in cols_u:
+                con.execute(f"ALTER TABLE usuarios ADD COLUMN {coluna} TEXT")
+        con.execute("CREATE TABLE IF NOT EXISTS eventos_pagamento (id TEXT PRIMARY KEY, evento TEXT, recebido_em TEXT NOT NULL)")
         con.execute("""
             CREATE TABLE IF NOT EXISTS agendamentos (
                 id TEXT PRIMARY KEY,
@@ -390,6 +404,24 @@ def login_obrigatorio(view):
     return envolvida
 
 
+def login_conta(view):
+    """Como login_obrigatorio, mas deixa passar quem está com o acesso
+    vencido: é por aqui que a pessoa vê a tela de assinatura e paga."""
+    @wraps(view)
+    def envolvida(*args, **kwargs):
+        uid = session.get("uid")
+        u = buscar_usuario(usuario_id=uid) if uid else None
+        if not u:
+            session.clear()
+            return jsonify({"erro": "Faça login.", "codigo": "sem_login"}), 401
+        situacao = situacao_acesso(u)
+        if situacao not in ("ativo", "expirado"):
+            return jsonify({"erro": "Seu acesso não está ativo.", "codigo": situacao}), 403
+        g.usuario = u
+        return view(*args, **kwargs)
+    return envolvida
+
+
 def dono_obrigatorio(view):
     @wraps(view)
     @login_obrigatorio
@@ -424,7 +456,20 @@ def _dados_eu(u: dict) -> dict:
         "limite_posts_mes": u["limite_posts_mes"], "limite_radar_mes": u["limite_radar_mes"],
         "posts_mes": contagem_mes(u["id"], "posts"), "radar_mes": contagem_mes(u["id"], "pautas"),
         "publicacao": {"configurada": publicador.configurado(), "liberada": pode_publicar(u)},
+        "assinatura": {"configurada": pagamentos.configurado() and u["papel"] != "dono", "plano": u.get("plano"),
+                       "status": u.get("assinatura_status"), "pagante": bool(u.get("pagante"))},
     }
+
+
+def definir_publicacao(usuario_id: str, ativo: bool, con):
+    con.execute("UPDATE usuarios SET publicacao_auto=? WHERE id=?", (1 if ativo else 0, usuario_id))
+    if not ativo:
+        # Sem o upgrade: desconecta os Instagrams dessa pessoa pra parar de
+        # pagar por eles na plataforma de publicação.
+        contas = con.execute("SELECT id, ig_account_id FROM perfis WHERE usuario_id=? AND ig_account_id IS NOT NULL", (usuario_id,)).fetchall()
+        for pid, conta in contas:
+            publicador.desconectar(conta)
+            con.execute("UPDATE perfis SET ig_account_id=NULL, ig_username=NULL WHERE id=?", (pid,))
 
 
 def pode_publicar(u: dict) -> bool:
@@ -448,7 +493,7 @@ def login():
     situacao = situacao_acesso(u)
     if situacao == "bloqueado":
         return jsonify({"erro": "Seu acesso está pausado. Fale com quem te convidou.", "codigo": "bloqueado"}), 403
-    if situacao == "expirado":
+    if situacao == "expirado" and not pagamentos.configurado():
         fim = _dt(u["acesso_ate"]).strftime("%d/%m/%Y")
         return jsonify({"erro": f"Seu período de acesso terminou em {fim}. Fale com quem te convidou pra continuar.", "codigo": "expirado"}), 403
     session.clear()
@@ -466,7 +511,7 @@ def logout():
 
 
 @app.get("/api/eu")
-@login_obrigatorio
+@login_conta
 def eu():
     return jsonify(_dados_eu(g.usuario))
 
@@ -543,6 +588,7 @@ def admin_listar():
                 "limite_posts_mes": u["limite_posts_mes"], "limite_radar_mes": u["limite_radar_mes"],
                 "pagante": bool(u["pagante"]), "observacao": u["observacao"] or "",
                 "publicacao_auto": bool(u["publicacao_auto"]),
+                "plano": u["plano"], "assinatura_status": u["assinatura_status"],
                 "ultimo_acesso": u["ultimo_acesso"], "criado_em": u["criado_em"], "perfis": perfis,
                 "posts_mes": contagem_mes(u["id"], "posts"), "radar_mes": contagem_mes(u["id"], "pautas"),
                 "posts_total": posts_total, "custo_mes_usd": round(uso_mes, 4), "custo_total_usd": round(uso_total, 4),
@@ -621,15 +667,7 @@ def admin_alterar(usuario_id):
             con.execute("UPDATE usuarios SET token_convite=?, convite_expira=? WHERE id=?", (token, expira, usuario_id))
             return jsonify({"link_convite": _link_convite(token)})
         elif acao == "publicacao":
-            ativo = bool(p.get("ativo"))
-            con.execute("UPDATE usuarios SET publicacao_auto=? WHERE id=?", (1 if ativo else 0, usuario_id))
-            if not ativo:
-                # Desligou o upgrade: desconecta os Instagrams dessa pessoa pra
-                # parar de pagar por eles na plataforma de publicação.
-                contas = con.execute("SELECT id, ig_account_id FROM perfis WHERE usuario_id=? AND ig_account_id IS NOT NULL", (usuario_id,)).fetchall()
-                for pid, conta in contas:
-                    publicador.desconectar(conta)
-                    con.execute("UPDATE perfis SET ig_account_id=NULL, ig_username=NULL WHERE id=?", (pid,))
+            definir_publicacao(usuario_id, bool(p.get("ativo")), con)
         elif acao == "editar":
             con.execute(
                 "UPDATE usuarios SET nome=?, limite_posts_mes=?, limite_radar_mes=?, pagante=?, observacao=? WHERE id=?",
@@ -856,6 +894,168 @@ def cancelar_agendamento(ag_id):
     with conectar() as con:
         con.execute("UPDATE agendamentos SET status='cancelado', atualizado_em=? WHERE id=?", (agora(), ag_id))
     return jsonify({"ok": True})
+
+
+# ═════════════════════════ Assinatura (Asaas) ═════════════════════════
+
+def _urls_retorno():
+    base = request.host_url.rstrip("/")
+    return {"sucesso": base + "/?assinatura=sucesso", "cancelado": base + "/?assinatura=cancelada", "expirado": base + "/?assinatura=expirada"}
+
+
+@app.get("/api/assinatura")
+@login_conta
+def ver_assinatura():
+    u = g.usuario
+    return jsonify({
+        "configurada": pagamentos.configurado(), "ambiente": pagamentos.ambiente(),
+        "planos": [{"id": k, **v} for k, v in PLANOS.items()],
+        "plano": u["plano"], "status": u["assinatura_status"], "pagante": bool(u["pagante"]),
+        "acesso_ate": u["acesso_ate"], "situacao": situacao_acesso(u), "tem_cadastro": bool(u["asaas_customer_id"]),
+    })
+
+
+@app.post("/api/assinatura/iniciar")
+@login_conta
+def iniciar_assinatura():
+    u = g.usuario
+    if u["papel"] == "dono":
+        return jsonify({"erro": "A conta de dono não precisa de assinatura."}), 400
+    if not pagamentos.configurado():
+        return jsonify({"erro": "O pagamento ainda não foi configurado. Fale com quem te convidou."}), 503
+    p = request.get_json(silent=True) or {}
+    plano = p.get("plano")
+    forma = p.get("forma")
+    if plano not in PLANOS or forma not in ("cartao", "pix"):
+        return jsonify({"erro": "Escolha o plano e a forma de pagamento."}), 400
+    try:
+        cliente = u["asaas_customer_id"]
+        if not cliente:
+            documento = pagamentos.so_digitos(p.get("cpf_cnpj"))
+            if len(documento) not in (11, 14):
+                return jsonify({"erro": "Informe um CPF ou CNPJ válido (só números)."}), 400
+            cliente = pagamentos.criar_cliente(u["nome"], u["email"], documento, u["id"])
+            with conectar() as con:
+                con.execute("UPDATE usuarios SET asaas_customer_id=? WHERE id=?", (cliente, u["id"]))
+        info = PLANOS[plano]
+        nome_plano = f"{APP_NOME} {info['nome']}"
+        if forma == "cartao":
+            r = pagamentos.checkout_cartao(cliente, nome_plano, info["valor"], _urls_retorno())
+        else:
+            r = pagamentos.assinatura_pix(cliente, nome_plano, info["valor"], u["id"])
+    except pagamentos.ErroPagamento as e:
+        return jsonify({"erro": str(e)}), 502
+    with conectar() as con:
+        con.execute("UPDATE usuarios SET plano_pendente=? WHERE id=?", (plano, u["id"]))
+    registrar_auditoria_pagamento(u["id"], f"checkout_{forma}", plano)
+    return jsonify({"url": r["url"]})
+
+
+@app.post("/api/assinatura/cancelar")
+@login_conta
+def cancelar_minha_assinatura():
+    u = g.usuario
+    if not u["asaas_subscription_id"]:
+        return jsonify({"erro": "Você não tem uma assinatura ativa."}), 400
+    pagamentos.cancelar_assinatura(u["asaas_subscription_id"])
+    with conectar() as con:
+        con.execute("UPDATE usuarios SET assinatura_status='cancelada' WHERE id=?", (u["id"],))
+    fim = _dt(u["acesso_ate"]).strftime("%d/%m/%Y") if u["acesso_ate"] else None
+    return jsonify({"ok": True, "acesso_ate": fim})
+
+
+def registrar_auditoria_pagamento(usuario_id, tipo, detalhe=""):
+    app.logger.info("pagamento usuario=%s tipo=%s %s", usuario_id, tipo, detalhe)
+
+
+def _plano_do_pagamento(u: dict, valor: float) -> str:
+    """O plano escolhido no checkout; se não houver, deduz pelo valor."""
+    if u.get("plano_pendente") in PLANOS:
+        return u["plano_pendente"]
+    if u.get("plano") in PLANOS:
+        return u["plano"]
+    return "completo" if valor >= PLANOS["completo"]["valor"] - 0.01 else "essencial"
+
+
+def processar_evento_pagamento(evento: dict) -> str:
+    """Aplica um aviso do Asaas. Devolve o que foi feito (pra log/testes)."""
+    tipo = evento.get("event") or ""
+    pag = evento.get("payment") or {}
+    sub = evento.get("subscription") or {}
+    cliente = pag.get("customer") or sub.get("customer")
+    if not cliente:
+        return "ignorado"
+    with conectar() as con:
+        r = con.execute("SELECT * FROM usuarios WHERE asaas_customer_id=?", (cliente,)).fetchone()
+    if not r:
+        return "cliente_desconhecido"
+    u = dict(r)
+
+    if tipo in ("PAYMENT_CONFIRMED", "PAYMENT_RECEIVED"):
+        valor = float(pag.get("value") or 0)
+        plano = _plano_do_pagamento(u, valor)
+        try:
+            vencimento = datetime.strptime((pag.get("dueDate") or "")[:10], "%Y-%m-%d")
+        except ValueError:
+            vencimento = datetime.now()
+        base = max(datetime.now(), vencimento)
+        novo_fim = base + timedelta(days=31 + DIAS_TOLERANCIA)
+        atual = _dt(u["acesso_ate"])
+        if u["acesso_ate"] is None and u["papel"] != "dono" and u["status"] == "ativo" and not u["pagante"]:
+            atual = None  # cortesia sem prazo vira mensal ao assinar
+        if atual and atual > novo_fim:
+            novo_fim = atual
+        assinatura_nova = pag.get("subscription")
+        antiga = u["asaas_subscription_id"]
+        with conectar() as con:
+            con.execute(
+                "UPDATE usuarios SET status=CASE WHEN status='convidado' THEN status ELSE 'ativo' END, acesso_ate=?, pagante=1, plano=?, "
+                "plano_pendente=NULL, assinatura_status='ativa', asaas_subscription_id=COALESCE(?, asaas_subscription_id) WHERE id=?",
+                (novo_fim.isoformat(timespec="seconds"), plano, assinatura_nova, u["id"]),
+            )
+            definir_publicacao(u["id"], plano == "completo", con)
+        if assinatura_nova and antiga and antiga != assinatura_nova:
+            pagamentos.cancelar_assinatura(antiga)  # trocou de plano: encerra a anterior
+        return f"pago:{plano}"
+
+    if tipo == "PAYMENT_OVERDUE":
+        with conectar() as con:
+            con.execute("UPDATE usuarios SET assinatura_status='atrasada' WHERE id=?", (u["id"],))
+        return "atrasado"
+
+    if tipo in ("PAYMENT_REFUNDED", "PAYMENT_CHARGEBACK_REQUESTED"):
+        with conectar() as con:
+            con.execute("UPDATE usuarios SET assinatura_status='estornada', acesso_ate=?, pagante=0 WHERE id=?", (agora(), u["id"]))
+            definir_publicacao(u["id"], False, con)
+        return "estornado"
+
+    if tipo in ("SUBSCRIPTION_DELETED", "SUBSCRIPTION_INACTIVATED"):
+        if sub.get("id") and sub.get("id") == u["asaas_subscription_id"]:
+            with conectar() as con:
+                con.execute("UPDATE usuarios SET assinatura_status='cancelada' WHERE id=?", (u["id"],))
+            return "cancelada"
+        return "ignorado"
+    return "ignorado"
+
+
+@app.post("/webhooks/asaas")
+def webhook_asaas():
+    esperado = os.environ.get("ASAAS_WEBHOOK_TOKEN", "")
+    recebido = request.headers.get("asaas-access-token", "")
+    if len(esperado) < 32 or not hmac.compare_digest(esperado, recebido):
+        return jsonify({"erro": "não autorizado"}), 401
+    evento = request.get_json(silent=True) or {}
+    evento_id = str(evento.get("id") or "")
+    if evento_id:
+        with conectar() as con:
+            if con.execute("SELECT 1 FROM eventos_pagamento WHERE id=?", (evento_id,)).fetchone():
+                return jsonify({"ok": True, "repetido": True})
+    resultado = processar_evento_pagamento(evento)
+    if evento_id:
+        with conectar() as con:
+            con.execute("INSERT OR IGNORE INTO eventos_pagamento (id, evento, recebido_em) VALUES (?,?,?)",
+                        (evento_id, evento.get("event"), agora()))
+    return jsonify({"ok": True, "resultado": resultado})
 
 
 # ═════════════════════════ Páginas ═════════════════════════

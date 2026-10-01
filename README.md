@@ -28,6 +28,16 @@ No celular, o botão **"📱 Postar pelo celular"** do post copia a legenda
 ordem do carrossel: é só escolher o Instagram, "Feed" e colar a legenda.
 No computador, use "Baixar tudo (.zip)".
 
+### Assinatura (Asaas)
+
+Com `ASAAS_API_KEY`, `ASAAS_AMBIENTE` e `ASAAS_WEBHOOK_TOKEN` no `.env`:
+no fim do teste a pessoa vê os planos e paga por **cartão** (recorrência
+automática, cartão digitado na página do Asaas) ou **Pix**. O Asaas avisa o
+sistema pelo webhook `https://SEU_DOMINIO/webhooks/asaas` e o acesso é
+estendido sozinho. Cadastre esse webhook no painel do Asaas com a mesma senha
+do `ASAAS_WEBHOOK_TOKEN` e os eventos de cobrança e de assinatura.
+Comece em `ASAAS_AMBIENTE=sandbox` (sem dinheiro de verdade).
+
 ### Publicação automática (plano Completo)
 
 Com `ZERNIO_API_KEY` no `.env` ([Zernio](https://zernio.com), cobra por
@@ -107,12 +117,14 @@ python tests/teste_nome_app.py
 python tests/teste_perfis.py
 python tests/teste_area.py
 python tests/teste_publicacao.py
+python tests/teste_assinatura.py
 ```
 
 ## Arquivos
 
 - `app.py`: servidor, contas, convites, painel e rotas
 - `motor/gerar_post.py`: prompts, regras da OAB, modelos de área, radar
+- `motor/pagamentos.py`: assinaturas e cobrança (API do Asaas)
 - `motor/publicador.py`: publicação e agendamento no Instagram (API do Zernio)
 - `motor/render_post.py`: desenho das artes (baseado no renderizador
   MIT da skill de carrossel tweet)
