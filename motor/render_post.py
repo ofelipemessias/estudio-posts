@@ -14,6 +14,7 @@ adaptado pra rodar dentro do servidor:
 """
 import glob
 import os
+import re
 import zipfile
 
 from PIL import Image, ImageDraw, ImageFont
@@ -273,6 +274,10 @@ def _slide_editorial(img, draw, texto, identidade, paleta, W, H, topo, base, ind
     largura = W - 2 * mx
     partes = [p for p in texto.replace("\r", "").split("\n\n") if p.strip()]
     titulo, corpo = (partes[0], "\n\n".join(partes[1:])) if partes else ("", "")
+    if "\n" in titulo:
+        # "**Fonte 1**" + explicação na linha de baixo: só a 1ª linha é título
+        primeira, resto = titulo.split("\n", 1)
+        titulo, corpo = primeira, resto + ("\n\n" + corpo if corpo else "")
     nome, handle = _identidade(identidade)
     # topo: marca
     fonte_marca = carregar_fonte("bold", 30)
@@ -321,10 +326,38 @@ def _slide_minimal(img, draw, texto, identidade, paleta, W, H, topo, base):
     _escrever(draw, linhas, f, fb, alt, mx, y, paleta, largura=largura, centralizar=True)
 
 
+# A fonte das artes (Liberation Sans) não tem emoji nem ✅/❌/✓: sem tratar,
+# eles viram quadradinhos. Marcadores viram "•" ou "×"; o resto é removido.
+_TROCAS_SIMBOLOS = {"✅": "•", "✔": "•", "✓": "•", "☑": "•", "🔹": "•", "🔸": "•", "▪": "•", "►": "•", "👉": "•", "➡": "→",
+                    "❌": "×", "✖": "×", "✗": "×", "✘": "×", "🚫": "×"}
+
+
+def _caractere_suportado(c: str) -> bool:
+    n = ord(c)
+    return n < 0x2100 or 0x2190 <= n <= 0x21FF or c in "•×→"
+
+
+def limpar_simbolos(texto: str) -> str:
+    """Troca/remove o que a fonte não desenha (emojis e afins)."""
+    saida = []
+    for c in texto or "":
+        if c in _TROCAS_SIMBOLOS:
+            saida.append(_TROCAS_SIMBOLOS[c])
+        elif c in "\ufe0f\u200d":
+            continue
+        elif _caractere_suportado(c):
+            saida.append(c)
+    limpo = "".join(saida)
+    limpo = re.sub(r"[ \t]{2,}", " ", limpo)
+    return "\n".join(l.rstrip() for l in limpo.split("\n")).strip()
+
+
 def desenhar_slide(texto: str, identidade: dict, paleta: dict, caminho_saida: str,
                    modelo: str = "tweet", tela: str = "feed", indice: int = 1, total: int = 1):
     """identidade: {"nome", "handle", "avatar_path" (opcional)}.
     modelo: tweet | editorial | minimal. tela: feed (1080x1350) | story (1080x1920)."""
+    texto = limpar_simbolos(texto)
+    identidade = {**identidade, "nome": limpar_simbolos(identidade.get("nome") or "")}
     W, H, topo, base = TELAS.get(tela, TELAS["feed"])
     img = Image.new("RGB", (W, H), paleta["fundo"])
     draw = ImageDraw.Draw(img)

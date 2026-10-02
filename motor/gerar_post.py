@@ -266,6 +266,8 @@ REGRAS_FORMATO = {
 - Slide 1 = gancho que para o scroll (contradiz uma crença, provoca, ou fala da dor na cara).
 - Slides do meio = problema e depois o conteúdo de valor (o que fazer, direitos, erros comuns).
 - Último slide = fechamento com {cta_regra}.
+- NÃO use emoji nem símbolos como ✅ ❌ 👇 nos slides (a arte não exibe emoji); pra listas, use "- item".
+  Na legenda, emoji é permitido com moderação. Hashtags sempre em minúsculas e sem acento.
 - NÃO escreva "Slide 1", "1/7" ou qualquer numeração do slide no texto. NÃO quebre linha no meio
   de uma frase: cada parágrafo é uma linha só; use linha em branco entre parágrafos.
 - Cada slide: no máximo ~45 palavras, frases curtas (até 12 palavras), parágrafos separados por
@@ -282,6 +284,7 @@ REGRAS_FORMATO = {
 - Telas do meio = a informação, em passos curtos.
 - Última tela = {cta_regra} (ex.: responder a enquete ou a caixinha de perguntas, mandar a dúvida, salvar).
 - Pode destacar 1 ou 2 palavras por tela com **asterisco duplo**.
+- Sem emoji e sem símbolos como ✅ ❌ 👇 nas telas (a arte não exibe emoji). Pra listas, use "- item".
 - Cada tela é um item da lista "slides". Na "legenda", escreva uma versão curta pra quem quiser
   repostar no feed (stories não têm legenda).""",
     "reels": """FORMATO: ROTEIRO DE REELS (30 a 60 segundos, falado pelo advogado olhando pra câmera)
@@ -377,6 +380,18 @@ def _limpar_roteiro(roteiro):
 _ITEM_DE_LISTA = re.compile(r"^\s*([-•▪►✅✔☑❌⚠➡👉]|\d+[.)]\s)")
 
 
+def _limpar_hashtags(lista) -> list:
+    """Hashtags em minúsculas, sem acento nem espaço (é como as pessoas buscam)."""
+    import unicodedata
+    saida = []
+    for h in lista:
+        h = unicodedata.normalize("NFKD", str(h)).encode("ascii", "ignore").decode().lower()
+        h = re.sub(r"[^a-z0-9_]", "", h)
+        if h and "#" + h not in saida:
+            saida.append("#" + h)
+    return saida[:12]
+
+
 def _limpar_slide(texto: str) -> str:
     """Limpa o texto de um slide gerado pela IA (não mexe em edições manuais):
     tira travessões, numeração ("1/7", "Slide 3:") e quebras de linha no meio
@@ -393,8 +408,11 @@ def _limpar_slide(texto: str) -> str:
             continue
         junto = linhas[0]
         for linha in linhas[1:]:
-            # mantém a quebra só quando a próxima linha é item de lista
-            junto += ("\n" if _ITEM_DE_LISTA.match(linha) else " ") + linha
+            # Junta só quebra no meio de frase: a próxima linha começa com
+            # minúscula, ou a anterior termina em vírgula. Mantém itens de
+            # lista e títulos ("**Fonte 1**" + "Uma lei mudou?").
+            meio_de_frase = (linha[:1].islower() or junto.endswith(",")) and not _ITEM_DE_LISTA.match(linha)
+            junto += (" " if meio_de_frase else "\n") + linha
         paragrafos.append(junto)
     return "\n\n".join(paragrafos).strip()
 
@@ -490,7 +508,7 @@ def gerar_post(opcoes: dict, perfil: dict) -> dict:
     if formato in ("post_unico", "reels"):
         slides = slides[:1]
     dados["slides"] = slides
-    dados["hashtags"] = [h if h.startswith("#") else "#" + h for h in (dados.get("hashtags") or [])][:12]
+    dados["hashtags"] = _limpar_hashtags(dados.get("hashtags") or [])
     dados["alertas"] = dados.get("alertas") or []
     dados["legenda"] = _sem_travessao(dados.get("legenda") or "")
     dados["roteiro_reels"] = _limpar_roteiro(dados.get("roteiro_reels")) if formato == "reels" else None

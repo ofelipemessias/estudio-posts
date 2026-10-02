@@ -21,6 +21,10 @@ CASOS = [
     ("Slides de aula também podem virar post.", "Slides de aula também podem virar post."),
     ("O que eu sempre digo pra quem vende pelo Instagram\nou usa o WhatsApp no trabalho:",
      "O que eu sempre digo pra quem vende pelo Instagram ou usa o WhatsApp no trabalho:"),
+    # título em linha própria + explicação começando com maiúscula: mantém a quebra
+    ("**Fonte 1: notícias da semana**\nUma lei mudou? Explique o que muda.",
+     "**Fonte 1: notícias da semana**\nUma lei mudou? Explique o que muda."),
+    ("Se a sua conta não tem proteção básica,\nVocê está na mira.", "Se a sua conta não tem proteção básica, Você está na mira."),
 ]
 falhas = 0
 for entrada, esperado in CASOS:
@@ -28,6 +32,23 @@ for entrada, esperado in CASOS:
     ok = obtido == esperado
     falhas += not ok
     print(("OK      " if ok else "FALHOU  ") + repr(entrada[:50]) + ("" if ok else f"\n   obtido: {obtido!r}"))
+# símbolos que a fonte não desenha
+from motor.render_post import limpar_simbolos as LS
+for entrada, esperado in [
+    ("O que pode:\n✅ Explicar um direito\n✔️ Tirar dúvidas", "O que pode:\n• Explicar um direito\n• Tirar dúvidas"),
+    ("❌ Prometer resultado", "× Prometer resultado"),
+    ("Deixe sua dúvida nos comentários. 👇", "Deixe sua dúvida nos comentários."),
+    ("Salve 📌 este **post** 🔥 agora", "Salve este **post** agora"),
+    ("Próximo passo → agende", "Próximo passo → agende"),
+]:
+    obtido = LS(entrada); ok = obtido == esperado; falhas += not ok
+    print(("OK      " if ok else "FALHOU  ") + "símbolos: " + repr(entrada[:40]) + ("" if ok else f"\n   obtido: {obtido!r}"))
+# hashtags
+from motor.gerar_post import _limpar_hashtags as LH
+r = LH(["#IAnaAdvocacia", "#OAB", "proteçãoPatrimonial", "#direito do consumidor", "#oab"])
+ok = r == ["#ianaadvocacia", "#oab", "#protecaopatrimonial", "#direitodoconsumidor"]; falhas += not ok
+print(("OK      " if ok else "FALHOU  ") + "hashtags minúsculas, sem acento e sem repetir" + ("" if ok else f"\n   obtido: {r!r}"))
+
 print()
 print(f"{falhas} falha(s)." if falhas else "Todos os testes passaram.")
 sys.exit(1 if falhas else 0)

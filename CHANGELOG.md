@@ -2,6 +2,19 @@
 
 Registro da evolução do Estúdio de Posts. Datas no formato AAAA-MM-DD.
 
+## [0.15.1] - 2026-10-01
+### Corrigido
+- **Emojis viravam quadradinhos nas artes** (a fonte não tem emoji): ✅/✔/✓
+  viram "•", ❌/✖ viram "×" e emojis decorativos (👇 📌 🔥) saem da arte.
+  Na legenda, os emojis continuam. A IA também foi orientada a não usar emoji
+  nos slides.
+- A limpeza dos slides juntava um título com a linha de baixo ("Fonte 1:
+  notícias da semana Uma lei mudou?"). Agora só junta quebras no meio de
+  frase (próxima linha em minúscula ou anterior terminando em vírgula).
+- Editorial: quando o primeiro parágrafo tem título + explicação em linhas
+  separadas, só a primeira linha vira título grande.
+- Hashtags sempre em minúsculas, sem acento e sem repetição.
+
 ## [0.15.0] - 2026-10-01
 ### Adicionado
 - **Novos estilos de arte**, além do Tweet:
