@@ -175,82 +175,177 @@ def _quebrar(texto: str, fonte, fonte_bold, largura_max: int):
     return linhas
 
 
-def _layout_texto(texto: str, altura_disponivel: int):
-    """Escolhe o maior tamanho de fonte (entre o padrão e o mínimo) em
-    que o texto cabe na altura disponível."""
-    tamanho = TEXT_SIZE_PADRAO
+def _layout_texto(texto: str, altura_disponivel: int, largura: int = CANVAS_W - 2 * MARGIN_X,
+                  tam_max: int = TEXT_SIZE_PADRAO, tam_min: int = TEXT_SIZE_MIN, peso: str = "regular", entrelinha: float = 1.36):
+    """Escolhe o maior tamanho de fonte (entre tam_max e tam_min) em que o
+    texto cabe na área disponível."""
+    tamanho = tam_max
     while True:
-        fonte = carregar_fonte("regular", tamanho)
+        fonte = carregar_fonte(peso, tamanho)
         fonte_bold = carregar_fonte("bold", tamanho)
-        altura_linha = int(tamanho * 1.36)
-        linhas = _quebrar(texto, fonte, fonte_bold, CANVAS_W - 2 * MARGIN_X)
+        altura_linha = int(tamanho * entrelinha)
+        linhas = _quebrar(texto, fonte, fonte_bold, largura)
         altura = sum(altura_linha if l else altura_linha // 2 for l in linhas)
-        if altura <= altura_disponivel or tamanho <= TEXT_SIZE_MIN:
+        if altura <= altura_disponivel or tamanho <= tam_min:
             return fonte, fonte_bold, altura_linha, linhas, altura
         tamanho -= 2
 
 
-# ---------------------------------------------------------------------------
-# Slide
-# ---------------------------------------------------------------------------
+def _largura_linha(linha, fonte, fonte_bold):
+    return sum(_largura_palavra(p, fonte, fonte_bold) for p in linha) + fonte.getlength(" ") * max(0, len(linha) - 1)
 
-def desenhar_slide(texto: str, identidade: dict, paleta: dict, caminho_saida: str):
-    """identidade: {"nome", "handle", "avatar_path" (opcional)}."""
-    img = Image.new("RGB", (CANVAS_W, CANVAS_H), paleta["fundo"])
-    draw = ImageDraw.Draw(img)
 
-    fonte_nome = carregar_fonte("bold", NAME_SIZE)
-    fonte_handle = carregar_fonte("regular", HANDLE_SIZE)
-    gap = 32
-    altura_max_texto = CANVAS_H - 2 * 90 - AVATAR_SIZE - gap
-    fonte, fonte_bold, altura_linha, linhas, altura_texto = _layout_texto(texto, altura_max_texto)
-
-    altura_total = AVATAR_SIZE + gap + altura_texto
-    y0 = max(60, (CANVAS_H - altura_total) // 2)
-
-    avatar_path = identidade.get("avatar_path")
-    if avatar_path and os.path.exists(avatar_path):
-        avatar = _avatar_circular(avatar_path, AVATAR_SIZE)
-    else:
-        avatar = _avatar_inicial(AVATAR_SIZE, identidade.get("nome", ""), paleta["destaque"], paleta["fundo"])
-    img.paste(avatar, (MARGIN_X, y0), avatar)
-
-    nome = identidade.get("nome") or "Seu nome"
-    handle = identidade.get("handle") or ""
-    if handle and not handle.startswith("@"):
-        handle = "@" + handle
-    x_nome = MARGIN_X + AVATAR_SIZE + 20
-    draw.text((x_nome, y0 + 10), nome, font=fonte_nome, fill=paleta["texto"])
-    _selo_verificado(img, x_nome + draw.textlength(nome, font=fonte_nome) + 10, y0 + 18, paleta["selo"])
-    draw.text((x_nome, y0 + 52), handle, font=fonte_handle, fill=paleta["handle"])
-
-    y = y0 + AVATAR_SIZE + gap
+def _escrever(draw, linhas, fonte, fonte_bold, altura_linha, x0, y, paleta, largura=None, centralizar=False,
+              cor_texto=None, negrito_tudo=False):
+    """Escreve as linhas (com **destaque**). Devolve o y final."""
+    cor_base = cor_texto or paleta["texto"]
     for linha in linhas:
         if not linha:
             y += altura_linha // 2
             continue
-        x = MARGIN_X
+        x = x0
+        if centralizar and largura:
+            x = x0 + (largura - _largura_linha(linha, fonte, fonte_bold)) / 2
         for palavra in linha:
             for pedaco, destacada in palavra:
-                f = fonte_bold if destacada else fonte
-                cor = paleta["destaque"] if destacada else paleta["texto"]
-                draw.text((x, y), pedaco, font=f, fill=cor)
+                f = fonte_bold if (destacada or negrito_tudo) else fonte
+                draw.text((x, y), pedaco, font=f, fill=paleta["destaque"] if destacada else cor_base)
                 x += f.getlength(pedaco)
             x += fonte.getlength(" ")
         y += altura_linha
+    return y
 
+
+# ---------------------------------------------------------------------------
+# Formatos de tela e modelos de arte
+# ---------------------------------------------------------------------------
+
+# (largura, altura, margem de cima, margem de baixo). No Story, as margens
+# protegem o texto da barra de progresso e do campo de resposta do Instagram.
+TELAS = {
+    "feed": (1080, 1350, 90, 90),
+    "story": (1080, 1920, 260, 340),
+}
+
+MODELOS_ARTE = {
+    "tweet": "Tweet (estilo post do X)",
+    "editorial": "Editorial (título grande)",
+    "minimal": "Minimalista (frase centralizada)",
+}
+
+
+def _identidade(identidade):
+    nome = identidade.get("nome") or "Seu nome"
+    handle = identidade.get("handle") or ""
+    if handle and not handle.startswith("@"):
+        handle = "@" + handle
+    return nome, handle
+
+
+def _avatar(identidade, paleta, tamanho):
+    avatar_path = identidade.get("avatar_path")
+    if avatar_path and os.path.exists(avatar_path):
+        return _avatar_circular(avatar_path, tamanho)
+    return _avatar_inicial(tamanho, identidade.get("nome", ""), paleta["destaque"], paleta["fundo"])
+
+
+def _slide_tweet(img, draw, texto, identidade, paleta, W, H, topo, base):
+    fonte_nome = carregar_fonte("bold", NAME_SIZE)
+    fonte_handle = carregar_fonte("regular", HANDLE_SIZE)
+    gap = 32
+    altura_max_texto = H - topo - base - AVATAR_SIZE - gap
+    fonte, fonte_bold, altura_linha, linhas, altura_texto = _layout_texto(texto, altura_max_texto, W - 2 * MARGIN_X)
+    altura_total = AVATAR_SIZE + gap + altura_texto
+    y0 = max(topo - 30, topo + (H - topo - base - altura_total) // 2)
+    avatar = _avatar(identidade, paleta, AVATAR_SIZE)
+    img.paste(avatar, (MARGIN_X, y0), avatar)
+    nome, handle = _identidade(identidade)
+    x_nome = MARGIN_X + AVATAR_SIZE + 20
+    draw.text((x_nome, y0 + 10), nome, font=fonte_nome, fill=paleta["texto"])
+    _selo_verificado(img, x_nome + draw.textlength(nome, font=fonte_nome) + 10, y0 + 18, paleta["selo"])
+    draw.text((x_nome, y0 + 52), handle, font=fonte_handle, fill=paleta["handle"])
+    _escrever(draw, linhas, fonte, fonte_bold, altura_linha, MARGIN_X, y0 + AVATAR_SIZE + gap, paleta)
+
+
+def _slide_editorial(img, draw, texto, identidade, paleta, W, H, topo, base, indice, total):
+    """Título grande (1º parágrafo), faixa de destaque e texto de apoio."""
+    mx = 90
+    largura = W - 2 * mx
+    partes = [p for p in texto.replace("\r", "").split("\n\n") if p.strip()]
+    titulo, corpo = (partes[0], "\n\n".join(partes[1:])) if partes else ("", "")
+    nome, handle = _identidade(identidade)
+    # topo: marca
+    fonte_marca = carregar_fonte("bold", 30)
+    draw.text((mx, topo - 20), (nome + (f"  ·  {handle}" if handle else "")).upper(), font=fonte_marca, fill=paleta["handle"])
+    # rodapé: contador e "arraste"
+    fonte_rod = carregar_fonte("bold", 30)
+    y_rod = H - base + 20
+    if total > 1:
+        draw.text((mx, y_rod), f"{indice}/{total}", font=fonte_rod, fill=paleta["handle"])
+        if indice < total and H <= 1400:  # no Story passa com toque, não com "arraste"
+            seta = "Arraste  →"
+            draw.text((W - mx - draw.textlength(seta, font=fonte_rod), y_rod), seta, font=fonte_rod, fill=paleta["destaque"])
+    # área útil
+    area_topo, area_fim = topo + 60, H - base - 30
+    disponivel = area_fim - area_topo
+    if corpo:
+        ft, ftb, alt_t, lin_t, h_t = _layout_texto(titulo, int(disponivel * 0.5), largura, 92, 54, peso="bold", entrelinha=1.18)
+        fc, fcb, alt_c, lin_c, h_c = _layout_texto(corpo, disponivel - h_t - 70, largura, 54, 30)
+    else:
+        ft, ftb, alt_t, lin_t, h_t = _layout_texto(titulo, disponivel - 40, largura, 104, 54, peso="bold", entrelinha=1.18)
+        lin_c, h_c = [], 0
+    bloco = 16 + 34 + h_t + (70 + h_c if lin_c else 0)
+    y = area_topo + max(0, (disponivel - bloco) // 2)
+    draw.rectangle([mx, y, mx + 110, y + 14], fill=paleta["destaque"])
+    y += 14 + 34
+    y = _escrever(draw, lin_t, ft, ftb, alt_t, mx, y, paleta, negrito_tudo=True)
+    if lin_c:
+        y += 70 - alt_t // 4
+        _escrever(draw, lin_c, fc, fcb, alt_c, mx, y, paleta)
+
+
+def _slide_minimal(img, draw, texto, identidade, paleta, W, H, topo, base):
+    """Frase grande e centralizada, com moldura fina na cor de destaque."""
+    borda = 46
+    draw.rectangle([borda, borda, W - borda, H - borda], outline=paleta["destaque"], width=6)
+    mx = 130
+    largura = W - 2 * mx
+    nome, handle = _identidade(identidade)
+    fonte_rod = carregar_fonte("bold", 30)
+    assinatura = handle or nome
+    y_ass = H - max(base, borda + 80) - 10
+    draw.text(((W - draw.textlength(assinatura, font=fonte_rod)) / 2, y_ass), assinatura, font=fonte_rod, fill=paleta["handle"])
+    disponivel = y_ass - topo - 60
+    f, fb, alt, linhas, h = _layout_texto(texto, disponivel, largura, 100 if H > 1400 else 92, 40, entrelinha=1.28)
+    y = topo + max(0, (disponivel - h) // 2)
+    _escrever(draw, linhas, f, fb, alt, mx, y, paleta, largura=largura, centralizar=True)
+
+
+def desenhar_slide(texto: str, identidade: dict, paleta: dict, caminho_saida: str,
+                   modelo: str = "tweet", tela: str = "feed", indice: int = 1, total: int = 1):
+    """identidade: {"nome", "handle", "avatar_path" (opcional)}.
+    modelo: tweet | editorial | minimal. tela: feed (1080x1350) | story (1080x1920)."""
+    W, H, topo, base = TELAS.get(tela, TELAS["feed"])
+    img = Image.new("RGB", (W, H), paleta["fundo"])
+    draw = ImageDraw.Draw(img)
+    if modelo == "editorial":
+        _slide_editorial(img, draw, texto, identidade, paleta, W, H, topo, base, indice, total)
+    elif modelo == "minimal":
+        _slide_minimal(img, draw, texto, identidade, paleta, W, H, topo, base)
+    else:
+        _slide_tweet(img, draw, texto, identidade, paleta, W, H, topo, base)
     img.save(caminho_saida, "PNG", optimize=True)
     return caminho_saida
 
 
-def desenhar_todos(textos: list, identidade: dict, paleta: dict, pasta: str) -> list:
+def desenhar_todos(textos: list, identidade: dict, paleta: dict, pasta: str, modelo: str = "tweet", tela: str = "feed") -> list:
     os.makedirs(pasta, exist_ok=True)
     for antigo in glob.glob(os.path.join(pasta, "slide_*.png")):
         os.remove(antigo)
     nomes = []
     for i, texto in enumerate(textos, 1):
         nome = f"slide_{i:02d}.png"
-        desenhar_slide(texto, identidade, paleta, os.path.join(pasta, nome))
+        desenhar_slide(texto, identidade, paleta, os.path.join(pasta, nome), modelo, tela, i, len(textos))
         nomes.append(nome)
     return nomes
 

@@ -122,6 +122,7 @@ python tests/teste_precos.py
 python tests/teste_limpeza_slides.py
 python tests/teste_regras_oab.py
 python tests/teste_fase1.py
+python tests/teste_estilos.py
 ```
 
 ## Arquivos

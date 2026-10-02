@@ -243,6 +243,8 @@ def iniciar_banco():
         for coluna in ("sugestoes", "sugestoes_em"):
             if coluna not in colunas:
                 con.execute(f"ALTER TABLE perfis ADD COLUMN {coluna} TEXT")
+        if "modelo_arte" not in colunas:
+            con.execute("ALTER TABLE perfis ADD COLUMN modelo_arte TEXT NOT NULL DEFAULT 'tweet'")
         if "regras_oab" not in colunas:
             con.execute("ALTER TABLE perfis ADD COLUMN regras_oab INTEGER NOT NULL DEFAULT 1")
         for coluna in ("zernio_profile_id", "ig_account_id", "ig_username"):
@@ -325,6 +327,7 @@ def _perfil_dict(r) -> dict:
         "usuario_id": r["usuario_id"], "voz": r["voz"] or "neutra",
         "ig_username": r["ig_username"], "ig_conectado": bool(r["ig_account_id"]),
         "regras_oab": bool(r["regras_oab"]) if r["regras_oab"] is not None else True,
+        "modelo_arte": r["modelo_arte"] if r["modelo_arte"] in render_post.MODELOS_ARTE else "tweet",
         "zernio_profile_id": r["zernio_profile_id"], "ig_account_id": r["ig_account_id"],
     }
 
@@ -366,7 +369,12 @@ def identidade_e_paleta(perfil: dict, sobrescrever: dict | None = None):
 def renderizar(post_id: str, dados: dict, perfil: dict):
     pasta = PASTA_POSTS / post_id
     identidade, paleta = identidade_e_paleta(perfil)
-    nomes = render_post.desenhar_todos(dados["slides"], identidade, paleta, str(pasta))
+    with conectar() as con:
+        r = con.execute("SELECT formato, opcoes FROM posts WHERE id=?", (post_id,)).fetchone()
+    opcoes = json.loads(r["opcoes"]) if r and r["opcoes"] else {}
+    modelo = opcoes.get("modelo_arte") if opcoes.get("modelo_arte") in render_post.MODELOS_ARTE else perfil.get("modelo_arte", "tweet")
+    tela = "story" if r and r["formato"] == "story" else "feed"
+    nomes = render_post.desenhar_todos(dados["slides"], identidade, paleta, str(pasta), modelo, tela)
     extras = {"legenda.txt": gerar_post.texto_legenda_completa(dados)}
     roteiro = gerar_post.texto_roteiro(dados.get("roteiro_reels"))
     if roteiro:
@@ -915,6 +923,8 @@ def publicar_post(post_id):
         return bloqueio
     if post["formato"] == "reels":
         return jsonify({"erro": "Reels precisa de vídeo, então ainda não dá pra publicar automático. Grave o vídeo e poste pelo app."}), 400
+    if post["formato"] == "story":
+        return jsonify({"erro": "Stories ainda não saem automático. Use o \"📱 Postar pelo celular\" e escolha Story no Instagram."}), 400
     if not perfil["ig_account_id"]:
         return jsonify({"erro": "Conecte o Instagram deste perfil primeiro (aba Perfil)."}), 400
     quando = (request.get_json(silent=True) or {}).get("quando") or None
@@ -1406,6 +1416,7 @@ def pagina(_token=None):
 def opcoes():
     return jsonify({
         "formatos": list(gerar_post.FORMATOS.items()),
+        "modelos_arte": list(render_post.MODELOS_ARTE.items()),
         "estilos_escrita": list(gerar_post.ESTILOS_ESCRITA.items()),
         "modelos_perfil": [[k, v["rotulo"]] for k, v in gerar_post.MODELOS_PERFIL.items()],
         "vozes": list(gerar_post.VOZES.items()),
@@ -1597,12 +1608,13 @@ def salvar_perfil(perfil_id):
     estilo = p.get("estilo_visual") if p.get("estilo_visual") in render_post.ESTILOS else "claro"
     with conectar() as con:
         con.execute(
-            "UPDATE perfis SET nome_exibicao=?, handle=?, area=?, sobre=?, frentes=?, publico=?, dna=?, estilo_visual=?, cores=?, voz=?, regras_oab=?, sugestoes_em=NULL WHERE id=?",
+            "UPDATE perfis SET nome_exibicao=?, handle=?, area=?, sobre=?, frentes=?, publico=?, dna=?, estilo_visual=?, cores=?, voz=?, regras_oab=?, modelo_arte=?, sugestoes_em=NULL WHERE id=?",
             (nome[:120], (p.get("handle") or "").strip()[:80], (p.get("area") or "").strip()[:200],
              (p.get("sobre") or "").strip()[:2000], json.dumps(_limpar_frentes(p.get("frentes")), ensure_ascii=False),
              (p.get("publico") or "").strip()[:12000], (p.get("dna") or "").strip()[:20000], estilo,
              json.dumps(_limpar_cores(p.get("cores"))), p.get("voz") if p.get("voz") in gerar_post.VOZES else "neutra",
-             0 if p.get("regras_oab") is False else 1, perfil_id),
+             0 if p.get("regras_oab") is False else 1,
+             p.get("modelo_arte") if p.get("modelo_arte") in render_post.MODELOS_ARTE else "tweet", perfil_id),
         )
     return jsonify({"ok": True})
 
@@ -1678,10 +1690,11 @@ def previa(perfil_id):
         "nome_exibicao": p.get("nome_exibicao"), "handle": p.get("handle"),
         "estilo_visual": p.get("estilo_visual"), "cores": _limpar_cores(p.get("cores")) or None,
     })
-    texto = "Esse é o visual das suas artes.\n\nPalavras importantes aparecem em **destaque**, assim.\n\nSalva esse post pra consultar depois."
+    texto = "Esse é o visual das suas **artes**.\n\nPalavras importantes aparecem em destaque. Salve este post pra consultar depois."
     tmp = DADOS / f"previa_{uuid.uuid4().hex}.png"
     try:
-        render_post.desenhar_slide(texto, identidade, paleta, str(tmp))
+        modelo = p.get("modelo_arte") if p.get("modelo_arte") in render_post.MODELOS_ARTE else perfil.get("modelo_arte", "tweet")
+        render_post.desenhar_slide(texto, identidade, paleta, str(tmp), modelo, "story" if p.get("tela") == "story" else "feed", 1, 3)
         dados = tmp.read_bytes()
     finally:
         tmp.unlink(missing_ok=True)
@@ -1788,6 +1801,7 @@ def criar_post(perfil_id):
         "pele_quem": (p.get("pele_quem") or "").strip()[:300], "pele_momento": (p.get("pele_momento") or "").strip()[:500],
         "pele_observacao": (p.get("pele_observacao") or "").strip()[:500],
         "noticia": {k: str(noticia.get(k, ""))[:600] for k in ("titulo", "resumo", "fonte_nome", "fonte_url", "angulo")} if noticia else None,
+        "modelo_arte": p.get("modelo_arte") if p.get("modelo_arte") in render_post.MODELOS_ARTE else perfil.get("modelo_arte", "tweet"),
     }
     post_id = uuid.uuid4().hex
     tema_registro = tema or (opcoes["noticia"] or {}).get("titulo") or opcoes["pele_momento"] or "Na pele do cliente"

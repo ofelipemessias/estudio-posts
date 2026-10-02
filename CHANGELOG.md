@@ -2,6 +2,23 @@
 
 Registro da evolução do Estúdio de Posts. Datas no formato AAAA-MM-DD.
 
+## [0.15.0] - 2026-10-01
+### Adicionado
+- **Novos estilos de arte**, além do Tweet:
+  - **Editorial**: título grande em negrito (1º parágrafo), faixa na cor de
+    destaque, texto de apoio, marca no topo, contagem "1/7" e "Arraste →".
+  - **Minimalista**: frase grande e centralizada, com moldura fina na cor de
+    destaque e o @ no rodapé.
+  - Estilo padrão por perfil (com prévia) e escolha do estilo em cada post.
+- **Formato Stories** (1080x1920): de 3 a 5 telas curtas, com margens de
+  segurança pras barras do Instagram (sem "Arraste" no Story). Publicação
+  automática de stories ainda não: o sistema orienta usar o "Postar pelo
+  celular".
+- Teste `tests/teste_estilos.py`.
+### Alterado
+- As artes aparecem no sistema na proporção real (antes eram cortadas em 4:5).
+- "Estilo" do perfil virou "Cores base".
+
 ## [0.14.0] - 2026-10-01
 ### Adicionado
 - **E-mails automáticos** pelo Resend (`motor/emails.py`): convite (opcional no

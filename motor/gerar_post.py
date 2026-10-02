@@ -16,7 +16,8 @@ MODELO = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6")
 
 FORMATOS = {
     "carrossel": "Carrossel (vários slides)",
-    "post_unico": "Post único (1 imagem estilo tweet)",
+    "post_unico": "Post único (1 imagem)",
+    "story": "Stories (telas verticais)",
     "reels": "Roteiro de Reels (texto + capa)",
 }
 
@@ -275,6 +276,14 @@ REGRAS_FORMATO = {
 - Parágrafos curtos separados por linha em branco. Sem emoji, sem hashtag, sem travessão.
 - Pode destacar 1 a 3 palavras-chave com **asterisco duplo**.
 - Devolva esse texto como o ÚNICO item da lista "slides".""",
+    "story": """FORMATO: STORIES (sequência de 3 a 5 telas verticais, vistas rapidinho no celular)
+- Cada tela: UMA ideia só, no máximo 25 palavras, frases bem curtas.
+- Tela 1 = gancho que faz a pessoa tocar pra ver a próxima (pergunta ou afirmação forte).
+- Telas do meio = a informação, em passos curtos.
+- Última tela = {cta_regra} (ex.: responder a enquete ou a caixinha de perguntas, mandar a dúvida, salvar).
+- Pode destacar 1 ou 2 palavras por tela com **asterisco duplo**.
+- Cada tela é um item da lista "slides". Na "legenda", escreva uma versão curta pra quem quiser
+  repostar no feed (stories não têm legenda).""",
     "reels": """FORMATO: ROTEIRO DE REELS (30 a 60 segundos, falado pelo advogado olhando pra câmera)
 - Gancho nos 3 primeiros segundos.
 - Cenas curtas com o que é falado e o texto que aparece na tela.
@@ -304,7 +313,7 @@ SAIDA_JSON_PAUTAS = """SAÍDA — responda SOMENTE com um JSON válido (sem text
       "por_que_importa": "por que isso mexe com o público",
       "angulo": "a frase-gancho sugerida pro post",
       "frente": "o NOME exato de uma das frentes listadas",
-      "formato_sugerido": "carrossel | post_unico | reels",
+      "formato_sugerido": "carrossel | post_unico | story | reels",
       "potencial": "alto | medio",
       "fonte_nome": "nome do veículo (vazio se for ideia sem notícia)",
       "fonte_url": "link da matéria (vazio se for ideia sem notícia)",

@@ -100,7 +100,7 @@
 
   .slides{display:grid; grid-template-columns:repeat(auto-fill, minmax(230px,1fr)); gap:14px; margin-top:14px;}
   .slide{border:1px solid var(--borda); border-radius:10px; overflow:hidden; background:var(--campo);}
-  .slide img{width:100%; aspect-ratio:4/5; display:block; background:var(--vazio-img); object-fit:cover;}
+  .slide img{width:100%; height:auto; min-height:120px; display:block; background:var(--vazio-img);}
   .slide textarea{border:none; border-top:1px solid var(--borda); border-radius:0; min-height:110px; font-size:12.5px;}
   .caixa{padding:14px 16px; background:var(--suave); border-radius:8px; white-space:pre-wrap; line-height:1.6;}
   .frente-linha{display:grid; grid-template-columns:200px 1fr auto; gap:8px; margin-bottom:8px;}
@@ -399,6 +399,7 @@
     <section id="aba-criar">
       <div class="cartao">
         <div class="campo"><label>Formato</label><div class="pilulas" id="formatos"></div></div>
+        <div class="campo" id="campo-modelo-arte"><label>Estilo da arte</label><div class="pilulas" id="modelos-arte"></div></div>
         <div class="campo"><label>Tema da área</label><div class="pilulas" id="frentes"></div></div>
         <div id="pauta-escolhida" class="caixa oculto" style="margin-bottom:16px;"></div>
         <div class="campo">
@@ -514,8 +515,12 @@
               <div class="campo"><label for="p-nome">Nome exibido</label><input id="p-nome"></div>
               <div class="campo"><label for="p-handle">@ do Instagram</label><input id="p-handle" placeholder="@perfil"></div>
             </div>
-            <div class="campo"><label for="p-estilo">Estilo</label>
-              <select id="p-estilo"><option value="escuro">Escuro (fundo preto)</option><option value="claro">Claro (fundo branco)</option><option value="marca">Azul-marinho e verde</option></select></div>
+            <div class="grade-2">
+              <div class="campo"><label for="p-modelo-arte">Estilo da arte (padrão)</label><select id="p-modelo-arte"></select>
+                <div class="info">Dá pra trocar em cada post, na hora de criar.</div></div>
+              <div class="campo"><label for="p-estilo">Cores base</label>
+                <select id="p-estilo"><option value="escuro">Escuro (fundo preto)</option><option value="claro">Claro (fundo branco)</option><option value="marca">Azul-marinho e verde</option></select></div>
+            </div>
             <label>Paletas prontas</label>
             <div class="paletas" id="paletas"></div>
             <div class="grade-3">
@@ -737,6 +742,11 @@
     opcoes = await api("/api/opcoes");
     $("aviso-chave").classList.toggle("oculto", opcoes.chave_configurada);
     $("formatos").innerHTML = opcoes.formatos.map(([v, r], i) => `<label><input type="radio" name="formato" value="${v}" ${i === 0 ? "checked" : ""}> ${esc(r)}</label>`).join("");
+    $("p-modelo-arte").innerHTML = opcoes.modelos_arte.map(([v, r]) => `<option value="${v}">${esc(r)}</option>`).join("");
+    $("modelos-arte").innerHTML = opcoes.modelos_arte.map(([v, r]) => `<label><input type="radio" name="modelo-arte" value="${v}"> ${esc(r.split(" (")[0])}</label>`).join("");
+    $("p-modelo-arte").addEventListener("change", atualizarPrevia);
+    document.querySelectorAll('input[name="formato"]').forEach((el) => el.addEventListener("change", () =>
+      $("campo-modelo-arte").classList.toggle("oculto", formato() === "reels")));
     document.querySelectorAll('input[name="formato"]').forEach((el) => el.addEventListener("change", () => $("campo-slides").classList.toggle("oculto", formato() !== "carrossel")));
     $("tom").innerHTML = opcoes.estilos_escrita.map(([v, d]) => `<option value="${v}">${esc(d.split(":")[0])}</option>`).join("");
     $("novo-modelo").innerHTML = opcoes.modelos_perfil.map(([v, r]) => `<option value="${v}">${esc(r)}</option>`).join("");
@@ -887,6 +897,7 @@
     $("com-perfil").classList.remove("oculto");
     atualizarTopoPerfil();
     atualizarCtas();
+    const mod = document.querySelector(`input[name="modelo-arte"][value="${(p && p.modelo_arte) || "tweet"}"]`); if (mod) mod.checked = true;
     try { localStorage.setItem("perfil_atual", p.id); } catch (e) {}
     $("titulo-perfil").textContent = p.nome_exibicao;
     $("sub-perfil").textContent = [p.handle, p.area].filter(Boolean).join(" · ") || "Complete o perfil na aba \"Perfil\".";
@@ -966,7 +977,7 @@
     try {
       const f = document.querySelector('input[name="frente"]:checked');
       const corpo = {
-        formato: formato(), frente: f ? f.value : "", tema: $("tema").value.trim(), estilo_escrita: $("tom").value,
+        formato: formato(), modelo_arte: (document.querySelector('input[name="modelo-arte"]:checked') || {}).value, frente: f ? f.value : "", tema: $("tema").value.trim(), estilo_escrita: $("tom").value,
         n_slides: parseInt($("n-slides").value, 10), cta: $("cta").value,
         pele_quem: $("pele-quem").value.trim(), pele_momento: $("pele-momento").value.trim(), pele_observacao: $("pele-obs").value.trim(),
       };
@@ -1561,7 +1572,7 @@
 
   async function atualizarPrevia(){
     try {
-      const resp = await fetch(`/api/perfis/${perfil.id}/previa`, json("POST", { nome_exibicao: $("p-nome").value, handle: $("p-handle").value, estilo_visual: $("p-estilo").value, cores: coresForm() }));
+      const resp = await fetch(`/api/perfis/${perfil.id}/previa`, json("POST", { nome_exibicao: $("p-nome").value, handle: $("p-handle").value, estilo_visual: $("p-estilo").value, cores: coresForm(), modelo_arte: $("p-modelo-arte").value }));
       if (resp.ok){ const antigo = $("p-previa").src; $("p-previa").src = URL.createObjectURL(await resp.blob()); if (antigo.startsWith("blob:")) URL.revokeObjectURL(antigo); }
     } catch (e) {}
   }
@@ -1571,7 +1582,7 @@
   function preencherPerfil(){
     esconder("erro-perfil"); esconder("ok-perfil");
     const p = perfil;
-    $("p-nome").value = p.nome_exibicao; $("p-handle").value = p.handle; $("p-estilo").value = p.estilo_visual;
+    $("p-nome").value = p.nome_exibicao; $("p-handle").value = p.handle; $("p-estilo").value = p.estilo_visual; $("p-modelo-arte").value = p.modelo_arte || "tweet";
     $("p-cor-fundo").value = p.cores.fundo || ""; $("p-cor-texto").value = p.cores.texto || ""; $("p-cor-destaque").value = p.cores.destaque || "";
     $("p-avatar-status").textContent = p.tem_avatar ? "Foto cadastrada. Envie outra pra trocar." : "Sem foto: as artes usam a inicial do nome.";
     $("p-oab").checked = p.regras_oab !== false; $("aviso-oab").classList.toggle("oculto", $("p-oab").checked);
@@ -1593,7 +1604,7 @@
     const frentes = [...$("p-frentes").querySelectorAll(".frente-linha")].map((l) => ({ nome: l.querySelector(".f-nome").value.trim(), descricao: l.querySelector(".f-desc").value.trim() })).filter((f) => f.nome);
     try {
       await api(`/api/perfis/${perfil.id}`, json("PUT", {
-        nome_exibicao: $("p-nome").value, handle: $("p-handle").value, estilo_visual: $("p-estilo").value, cores: coresForm(),
+        nome_exibicao: $("p-nome").value, handle: $("p-handle").value, estilo_visual: $("p-estilo").value, cores: coresForm(), modelo_arte: $("p-modelo-arte").value,
         area: $("p-area").value, voz: $("p-voz").value, regras_oab: $("p-oab").checked, sobre: $("p-sobre").value, frentes, publico: $("p-publico").value, dna: $("p-dna").value,
       }));
       await carregarPerfis(perfil.id);
